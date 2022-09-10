@@ -282,12 +282,13 @@ void Load_Config(void)
                 Cur_Top = (Cur_Top - Cur_Height) / 2;
             }
             SDL_FreeSurface(Desktop);
-
+#ifndef __MORPHOS__
             sprintf(Win_Coords,
                     "SDL_VIDEO_WINDOW_POS=%d,%d",
                     Cur_Left,
                     Cur_Top);
             SDL_putenv(Win_Coords);
+#endif
         }
         fclose(in);
     }

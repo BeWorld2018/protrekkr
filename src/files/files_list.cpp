@@ -36,14 +36,18 @@
 
 #if defined(__WIN32__)
 #include <shlwapi.h>
-#elif defined(__AMIGAOS4__) || defined(__AROS__)
+#elif defined(__AMIGAOS4__) || defined(__AROS__) || defined(__MORPHOS__)
 #include <dos/dosextens.h>
 #include <proto/dos.h>
 #include <dirent.h>
-#if defined(__AROS__)
+#if defined(__AROS__) || defined(__MORPHOS__)
 #include <stdint.h>
 #define int32 int32_t
 #define uint32 uint32_t
+#endif
+#ifdef __MORPHOS__
+#define AROS_BSTR_strlen(s) *((UBYTE *)BADDR(s))
+#define AROS_BSTR_ADDR(x) (char *)BADDR(x)+1 
 #endif
 #else
 #include <ftw.h>
@@ -203,7 +207,7 @@ void Set_Current_Dir(void)
 {
     char filename[MAX_PATH];
 
-#if defined(__AMIGAOS4__) || defined(__AROS__)
+#if defined(__AMIGAOS4__) || defined(__AROS__) || defined(__MORPHOS__)
     char *tmp = Dir_Act[0] ? &Dir_Act[strlen(Dir_Act) - 1] : NULL;
 
     if (tmp && *tmp == '/') *tmp = 0;
@@ -334,7 +338,7 @@ int list_file(const char *fpath, const struct stat *sb, int typeflag, struct FTW
 #endif
 
 // AROS
-#if defined(__AROS__)
+#if defined(__AROS__) || defined(__MORPHOS__)
 void CopyStringBSTRToC(BSTR in,
                        STRPTR out,
                        uint32_t max)
@@ -477,7 +481,7 @@ void Read_SMPT(void)
         Ptr_Drives += strlen(Ptr_Drives) + 1;
     }
 
-#elif defined(__AMIGAOS4__) || defined(__AROS__)
+#elif defined(__AMIGAOS4__) || defined(__AROS__) || defined(__MORPHOS__)
 
 #if defined(__AMIGAOS4__)
 #define LockDosList(f) IDOS->LockDosList(f)
