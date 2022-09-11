@@ -40,18 +40,15 @@
 #include <dos/dosextens.h>
 #include <proto/dos.h>
 #include <dirent.h>
-#if defined(__AROS__)
-#include <stdint.h>
-#define int32 int32_t
-#define uint32 uint32_t
-#elif defined(__MORPHOS__)
-#include <sys/stat.h>
-#define PATH_SEPARATOR "/"
+#if defined(__AROS__) || defined(__MORPHOS__)
 #include <stdint.h>
 #define int32 int32_t
 #define uint32 uint32_t
 #endif
 #ifdef __MORPHOS__
+#include <sys/stat.h>
+#define PATH_SEPARATOR "/"
+#define MAXLEN 512
 #define AROS_BSTR_strlen(s) *((UBYTE *)BADDR(s))
 #define AROS_BSTR_ADDR(x) (char *)BADDR(x)+1 
 #endif
@@ -515,7 +512,7 @@ void Read_SMPT(void)
     {
 #ifdef __MORPHOS__
 		struct stat status;
-		static char full_filename[512] = { 0 };
+		static char full_filename[MAXLEN] = { 0 };
 		static char split[2] = { PATH_SEPARATOR[0], 0 };
 #endif
 		
@@ -530,21 +527,19 @@ void Read_SMPT(void)
             {
 #ifdef __MORPHOS__
 				full_filename[0] = 0;
+				strncpy(full_filename, Dir_Act, MAXLEN);
 			
-				strcpy(full_filename, Dir_Act);
-			
-				if (strlen(full_filename)>0 && full_filename[strlen(full_filename)-1] != ':'
-					&& full_filename[strlen(full_filename)-1] != '/')
-						strcat(full_filename, "/");
+				if (strlen(full_filename)>0 && full_filename[strlen(full_filename)-1] != ':' && full_filename[strlen(full_filename)-1] != '/')
+					strncat(full_filename, PATH_SEPARATOR, MAXLEN - 1);
 				
-				strcpy(full_filename, dp->d_name);
+				strncpy(full_filename, dp->d_name, MAXLEN);
 
 				if (stat(full_filename, &status) == 0)
 				{
 					if (S_ISDIR(status.st_mode)>0) 
 					{
 						nbr_dirs++;
-                    	Add_Entry(dp->d_name, _A_SUBDIR);
+						Add_Entry(dp->d_name, _A_SUBDIR);
 					} else {
 						Add_Entry(dp->d_name, 0);
 					}
