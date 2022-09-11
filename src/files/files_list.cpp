@@ -40,7 +40,13 @@
 #include <dos/dosextens.h>
 #include <proto/dos.h>
 #include <dirent.h>
-#if defined(__AROS__) || defined(__MORPHOS__)
+#if defined(__AROS__)
+#include <stdint.h>
+#define int32 int32_t
+#define uint32 uint32_t
+#elif defined(__MORPHOS__)
+#include <sys/stat.h>
+#define PATH_SEPARATOR "/"
 #include <stdint.h>
 #define int32 int32_t
 #define uint32 uint32_t
@@ -507,6 +513,12 @@ void Read_SMPT(void)
     }
     else
     {
+#ifdef __MORPHOS__
+		struct stat status;
+		static char full_filename[512] = { 0 };
+		static char split[2] = { PATH_SEPARATOR[0], 0 };
+#endif
+		
         DIR *dirp;
         struct dirent *dp;
 
@@ -516,15 +528,38 @@ void Read_SMPT(void)
             // Add the directories first
             while ((dp = readdir(dirp)) != NULL)
             {
+#ifdef __MORPHOS__
+				full_filename[0] = 0;
+			
+				strcpy(full_filename, Dir_Act);
+			
+				if (strlen(full_filename)>0 && full_filename[strlen(full_filename)-1] != ':'
+					&& full_filename[strlen(full_filename)-1] != '/')
+						strcat(full_filename, "/");
+				
+				strcpy(full_filename, dp->d_name);
+
+				if (stat(full_filename, &status) == 0)
+				{
+					if (S_ISDIR(status.st_mode)>0) 
+					{
+						nbr_dirs++;
+                    	Add_Entry(dp->d_name, _A_SUBDIR);
+					} else {
+						Add_Entry(dp->d_name, 0);
+					}
+				}
+#else
                 if(dp->d_type == DT_DIR)
                 {
                     nbr_dirs++;
                     Add_Entry(dp->d_name, _A_SUBDIR);
                 }
+#endif
             }
             closedir(dirp);
         }
-
+#ifndef __MORPHOS__
         dirp = opendir(Dir_Act);
         if (dirp)
         {
@@ -538,7 +573,7 @@ void Read_SMPT(void)
             }
             closedir(dirp);
         }
-
+#endif
         if(sort_files)
         {
             qsort(&SMPT_LIST[0], list_counter[Scopish], sizeof(FILEENTRY), &File_Comp_Files);
