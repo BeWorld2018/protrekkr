@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2022 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -406,7 +406,6 @@ void Load_Amiga_Mod(char *Name, const char *FileName, int channels, int digiboos
                 {
                     Digi_Mod[952 + i] = Getc_Mod();
                 }
-
                 for(i = 0; i < 31; i++)
                 {
                     Sample_Length[i][0] = Getc_Mod_Dword();

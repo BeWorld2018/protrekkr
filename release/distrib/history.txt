@@ -2,6 +2,13 @@
 ProTrekkr releases history
 ===============================================================================
 
+v2.6.4
+
+- Slightly revised manual.
+- Window now opens at the center of the screen.
+- Window size is now remembered when switching back from full screen.
+- Added an option to reload last used ptk at startup.
+
 v2.6.3
 
 - Fixed a small bug in synth params.

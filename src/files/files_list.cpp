@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2022 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,17 +40,24 @@
 #include <dos/dosextens.h>
 #include <proto/dos.h>
 #include <dirent.h>
+#include <sys/stat.h>
 #if defined(__AROS__) || defined(__MORPHOS__)
 #include <stdint.h>
 #define int32 int32_t
 #define uint32 uint32_t
+#define PATH_SEPARATOR "/"
+#define MAXLEN 512
+#endif
+#ifdef __MORPHOS__
+#define AROS_BSTR_strlen(s) *((UBYTE *)BADDR(s))
+#define AROS_BSTR_ADDR(x) (char *)BADDR(x)+1
 #endif
 #ifdef __MORPHOS__
 #include <sys/stat.h>
 #define PATH_SEPARATOR "/"
 #define MAXLEN 512
 #define AROS_BSTR_strlen(s) *((UBYTE *)BADDR(s))
-#define AROS_BSTR_ADDR(x) (char *)BADDR(x)+1 
+#define AROS_BSTR_ADDR(x) (char *)BADDR(x)+1
 #endif
 #else
 #include <ftw.h>
@@ -154,7 +161,7 @@ int File_Comp_Files(const void *elem1, const void *elem2)
     int i;
     LPFILEENTRY Ent1 = (LPFILEENTRY) elem1;
     LPFILEENTRY Ent2 = (LPFILEENTRY) elem2;
-    
+
     // File before directories
     if(Ent1->Type == _A_SUBDIR && Ent2->Type == _A_FILE) return 1;
     if(Ent1->Type == _A_FILE && Ent2->Type == _A_SUBDIR) return -1;
@@ -183,7 +190,7 @@ int File_Comp_Files(const void *elem1, const void *elem2)
     char Sort_Type;
     char Cur_Letter;
     int Cur_Type;
-    
+
     Sort_Letter = 0;
     Sort_Type = Get_FileType(0);
     for(i = 0; i < list_counter[Scopish]; i++)
@@ -246,7 +253,7 @@ void Set_Current_Dir(void)
     if (tmp && *tmp == 0)
     {
         *tmp = '/';
-    }    
+    }
     if (!strcmp(Dir_Act, "/"))
     {
         strcpy(filename, "/");
@@ -259,7 +266,7 @@ void Set_Current_Dir(void)
 #else
     strcpy(filename, Get_FileName(lt_curr[Scopish]));
 #endif
- 
+
     switch(Scopish)
     {
         case SCOPE_ZONE_MOD_DIR:
@@ -315,7 +322,7 @@ int list_file(const char *fpath, const struct stat *sb, int typeflag, struct FTW
                             break;
                         }
                     }
-                    
+
                     nbr_dirs++;
                     Add_Entry(&fpath[len_name], _A_SUBDIR);
                     break;
@@ -330,7 +337,7 @@ int list_file(const char *fpath, const struct stat *sb, int typeflag, struct FTW
                             break;
                         }
                     }
-                    
+
                     Add_Entry(&fpath[len_name], _A_FILE);
                     break;
             }
@@ -347,9 +354,9 @@ void CopyStringBSTRToC(BSTR in,
                        uint32_t max)
 {
     uint32_t i;
-    
+
     max = AROS_BSTR_strlen(in);
-    
+
     for(i = 0; i < max; i++)
     {
         out[i] = *(AROS_BSTR_ADDR(in) + i);
@@ -364,7 +371,7 @@ void Read_SMPT(void)
 {
     int i;
 
-    lt_items[Scopish] = 0;  
+    lt_items[Scopish] = 0;
     list_counter[Scopish] = 0;
 
 #if defined(__WIN32__)
@@ -424,7 +431,7 @@ void Read_SMPT(void)
             }
         }
 
-        // Find the rest of the directories 
+        // Find the rest of the directories
         while(_findnext(hFile, &c_file) == 0)
         {
             if(c_file.attrib & _A_SUBDIR)
@@ -454,7 +461,7 @@ void Read_SMPT(void)
                 {
                     Add_Entry(c_file.name, 0);
                 }
-            } // while      
+            } // while
             _findclose(hFile);
 
             if(sort_files)
@@ -510,12 +517,13 @@ void Read_SMPT(void)
     }
     else
     {
-#ifdef __MORPHOS__
+
+#if defined(__AROS__) || defined(__MORPHOS__)
 		struct stat status;
 		static char full_filename[MAXLEN] = { 0 };
 		static char split[2] = { PATH_SEPARATOR[0], 0 };
 #endif
-		
+
         DIR *dirp;
         struct dirent *dp;
 
@@ -525,42 +533,62 @@ void Read_SMPT(void)
             // Add the directories first
             while ((dp = readdir(dirp)) != NULL)
             {
-#ifdef __MORPHOS__
+
+#if defined(__AROS__) || defined(__MORPHOS__)
 				full_filename[0] = 0;
 				strncpy(full_filename, Dir_Act, MAXLEN);
-			
-				if (strlen(full_filename)>0 && full_filename[strlen(full_filename)-1] != ':' && full_filename[strlen(full_filename)-1] != '/')
+
+				if (strlen(full_filename) > 0 && full_filename[strlen(full_filename) - 1] != ':' &&
+                    full_filename[strlen(full_filename) - 1] != '/')
+                {
 					strncat(full_filename, PATH_SEPARATOR, MAXLEN - 1);
-				
+                }
+
 				strncpy(full_filename, dp->d_name, MAXLEN);
 
 				if (stat(full_filename, &status) == 0)
 				{
-					if (S_ISDIR(status.st_mode)>0) 
+					if (S_ISDIR(status.st_mode) > 0)
 					{
 						nbr_dirs++;
 						Add_Entry(dp->d_name, _A_SUBDIR);
-					} else {
+					}
+                    else
+                    {
 						Add_Entry(dp->d_name, 0);
 					}
 				}
 #else
+                struct stat st;
+                if(dp->d_type == DT_UNKNOWN &&
+                   stat(dp->d_name, &st) == 0)
+                {
+                  dp->d_type = IFTODT(st.st_mode);
+                }
                 if(dp->d_type == DT_DIR)
                 {
                     nbr_dirs++;
                     Add_Entry(dp->d_name, _A_SUBDIR);
                 }
 #endif
+
             }
             closedir(dirp);
         }
-#ifndef __MORPHOS__
+
+#if !defined(__AROS__) && !defined(__MORPHOS__)
         dirp = opendir(Dir_Act);
         if (dirp)
         {
             // Then add the files
             while ((dp = readdir(dirp)) != NULL)
             {
+                struct stat st;
+                if(dp->d_type == DT_UNKNOWN &&
+                   stat(dp->d_name, &st) == 0)
+                {
+                  dp->d_type = IFTODT(st.st_mode);
+                }
                 if(dp->d_type != DT_DIR)
                 {
                     Add_Entry(dp->d_name, 0);
@@ -569,6 +597,7 @@ void Read_SMPT(void)
             closedir(dirp);
         }
 #endif
+
         if(sort_files)
         {
             qsort(&SMPT_LIST[0], list_counter[Scopish], sizeof(FILEENTRY), &File_Comp_Files);

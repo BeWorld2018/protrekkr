@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2022 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -120,6 +120,8 @@ int Cur_Left = -1;
 int Cur_Top = -1;
 int Cur_Width = SCREEN_WIDTH;
 int Cur_Height = SCREEN_HEIGHT;
+int Save_Cur_Width = -1;
+int Save_Cur_Height = -1;
 char AutoSave;
 char Window_Title[256];
 extern int gui_pushed;
@@ -132,6 +134,8 @@ extern int Nbr_Update_Rects;
 extern SDL_Rect Update_Stack[2048];
 
 char *ExePath;
+extern char AutoReload;
+char Last_Used_Ptk[MAX_PATH];
 
 SDL_Event Events[MAX_EVENTS];
 
@@ -434,23 +438,28 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
     Startup_Height = Screen_Info->current_h;
 
 #if defined(__LINUX__)
-    // Note:
-    // it looks like some distros don't have /proc/self
-    // Maybe a better (?) solution would be to use:
-    // sprintf(ExeProc, "/proc/$d/exe", getpid());
-    // readlink(ExeProc, ExePath, sizeof(ExePath));
-    readlink("/proc/self/exe", ExePath, ExePath_Size);
-    int exename_len = strlen(ExePath);
-    while(exename_len--)
-    {
-        if(ExePath[exename_len] == '/')
+
+    #if defined(__FREEBSD__) || defined(__NETBSD__)
+        GETCWD(ExePath, MAX_PATH);
+    #else
+        // Note:
+        // it looks like some distros don't have /proc/self
+        // Maybe a better (?) solution would be to use:
+        // sprintf(ExeProc, "/proc/$d/exe", getpid());
+        // readlink(ExeProc, ExePath, sizeof(ExePath));
+        readlink("/proc/self/exe", ExePath, ExePath_Size);
+        int exename_len = strlen(ExePath);
+        while(exename_len--)
         {
-            ExePath[exename_len] = 0;
-            exename_len++;
-            break;
+            if(ExePath[exename_len] == '/')
+            {
+                ExePath[exename_len] = 0;
+                exename_len++;
+                break;
+            }
         }
-    }
-    CHDIR(ExePath);
+        CHDIR(ExePath);
+    #endif
 
 #elif defined(__HAIKU__)
 	chdir(dirname(argv[0]));
@@ -475,7 +484,7 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
         }
 
         // There's a probably a better way to do that but
-        // it works fine and i want the app to be able 
+        // it works fine and i want the app to be able
         // to run from a console too.
         int Found_File = FALSE;
         strcat(ExePath, "/../");
@@ -531,7 +540,6 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
         while(!feof(AllKbsFile))
         {
             fscanf(AllKbsFile, "%s", &KbFileName);
-
 
 #if defined(__WIN32__)
             strcpy(KbFileNameToLoad, ExePath);
@@ -646,9 +654,18 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
     Set_Phony_Palette();
     Refresh_Palette();
 
+    // Check if there's an argument
     if(argc != 1)
     {
         LoadFile(0, argv[1]);
+    }
+    else
+    {
+        // Nope: check if auto reload was turned on
+        if(AutoReload)
+        {
+            LoadFile(0, Last_Used_Ptk);
+        }
     }
 
     while(!Prog_End)
@@ -862,10 +879,12 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
 
                 case SDL_VIDEORESIZE:
                     // Nullify it
+
 #ifndef __MORPHOS__
                     sprintf(Win_Coords, "SDL_VIDEO_WINDOW_POS=");
                     SDL_putenv(Win_Coords);
 #endif
+
                     Switch_FullScreen(Events[i].resize.w, Events[i].resize.h);
                     break;
 
@@ -903,7 +922,10 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
         if(Display_Pointer) Display_Mouse_Pointer(Mouse.x, Mouse.y, FALSE);
 
         // Flush all pending blits
-        if(Nbr_Update_Rects) SDL_UpdateRects(Main_Screen, Nbr_Update_Rects, Update_Stack);
+        if(Nbr_Update_Rects)
+        {
+            SDL_UpdateRects(Main_Screen, Nbr_Update_Rects, Update_Stack);
+        }
         Nbr_Update_Rects = 0;
 
         Mouse.old_x = Mouse.x;
@@ -931,7 +953,7 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
 }
 
 // ------------------------------------------------------
-// Display an error messagebox
+// Display an error message somewhere
 void Message_Error(char *Message)
 {
     printf("Error: %s\n", Message);
@@ -944,31 +966,45 @@ int Switch_FullScreen(int Width, int Height)
     Env_Change = TRUE;
     if(Width < SCREEN_WIDTH) Width = SCREEN_WIDTH;
     if(Height < SCREEN_HEIGHT) Height = SCREEN_HEIGHT;
-    
+
+#ifndef __MORPHOS__
+    SDL_putenv("SDL_VIDEO_WINDOW_POS=center");
+    SDL_putenv("SDL_VIDEO_CENTERED=1");
+#endif
+
     if(FullScreen)
     {
         if((Main_Screen = SDL_SetVideoMode(Startup_Width,
                                            Startup_Height,
                                            SCREEN_BPP,
-                                           SDL_SWSURFACE |
                                            (FullScreen ? SDL_FULLSCREEN : 0))) == NULL)
         {
             return(FALSE);
         }
         Width = Startup_Width;
         Height = Startup_Height;
+        Save_Cur_Width = Cur_Width;
+        Save_Cur_Height = Cur_Height;
     }
     else
     {
+
+        if(Save_Cur_Width != -1)
+        {
+            Width = Save_Cur_Width;
+            Height = Save_Cur_Height;
+        }
         if((Main_Screen = SDL_SetVideoMode(Width, Height,
                                            SCREEN_BPP,
                                            SDL_RESIZABLE |
-                                           SDL_SWSURFACE |
                                            (FullScreen ? SDL_FULLSCREEN : 0))) == NULL)
         {
             return(FALSE);
         }
+        Save_Cur_Width = -1;
+        Save_Cur_Height = -1;
     }
+
     Cur_Width = Width;
     Cur_Height = Height;
     CONSOLE_WIDTH = Cur_Width;
@@ -987,7 +1023,7 @@ int Switch_FullScreen(int Width, int Height)
     // Flush any pending rects
     Nbr_Update_Rects = 0;
 
-#ifndef __MORPHOS__	
+#ifndef __MORPHOS__
     // Obtain SDL window
     SDL_GetWMInfo(&WMInfo);
 #endif

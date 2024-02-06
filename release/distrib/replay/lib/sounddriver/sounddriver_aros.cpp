@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2021 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -120,8 +120,10 @@ void *AUDIO_Thread(void *arg)
             SendIO((struct IORequest *) io);
             if(join) WaitIO((struct IORequest *) join);
             join = io;
-            AHIio = AHIio2; AHIio2 = io;
-            AHIbuf = AHIbuf2; AHIbuf2 = buf;
+            AHIio = AHIio2;
+            AHIio2 = io;
+            AHIbuf = AHIbuf2;
+            AHIbuf2 = buf;
         
             AUDIO_Samples += AUDIO_SoundBuffer_Size;
             AUDIO_Timer = ((((float) AUDIO_Samples) * (1.0f / (float) AUDIO_Latency)) * 1000.0f);

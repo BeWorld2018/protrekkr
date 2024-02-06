@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2022 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -251,7 +251,6 @@ void Small_Letter(int x, int y, char ltr, int ys, int y2);
 void Note_Large_Letter(int x, int y, char ltr, int ys, int y2);
 extern void (*Letter_Function)(int x, int y, char ltr, int ys, int y2);
 
-void DrawLine(int x1, int y1, int x2, int y2);
 void DrawPixel(int x, int y, int Color);
 void DrawHLine(int y, int x1, int x2, int Color);
 void DrawVLine(int x, int y1, int y2, int Color);

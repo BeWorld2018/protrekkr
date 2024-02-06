@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2022 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -57,13 +57,6 @@ SDL_Rect Update_Stack[UPDATE_STACK_SIZE];
 // ------------------------------------------------------
 // Functions
 int Get_Char_Position(char *Ascii_Letters, int Max_Letters, char Letter);
-
-// ------------------------------------------------------
-// Draw a line
-void DrawLine(int x1, int y1, int x2, int y2)
-{
-    Draw_Line(Main_Screen, x1, y1, x2, y2, FgColor);
-}
 
 // ------------------------------------------------------
 // Draw a pixel
@@ -375,7 +368,7 @@ void Push_Update_Rect(int x, int y, int width, int height)
         height = -height;
         y -= height;
     }
-    if(Nbr_Update_Rects < 2048 - 1)
+    if(Nbr_Update_Rects < (UPDATE_STACK_SIZE - 1))
     {
         if(Check_Rect(x, y, width + 1, height + 1))
         {

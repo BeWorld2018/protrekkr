@@ -53,7 +53,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /machine:I386
-# ADD LINK32 kernel32.lib user32.lib sdl.lib dsound.lib msacm32.lib zlib.lib winmm.lib advapi32.lib sdl_draw.lib shlwapi.lib tinyxml.lib sdlmain.lib msvcrt.lib libcp.lib /nologo /subsystem:windows /pdb:none /machine:I386 /nodefaultlib /out:"release/distrib/ptk_win.exe"
+# ADD LINK32 kernel32.lib user32.lib sdl.lib dsound.lib msacm32.lib zlib.lib winmm.lib advapi32.lib sdl_draw.lib shlwapi.lib sdlmain.lib msvcrt.lib libcp.lib opengl32.lib /nologo /subsystem:windows /pdb:none /machine:I386 /nodefaultlib /out:"release/distrib/ptk_win.exe"
 # SUBTRACT LINK32 /debug
 
 !ELSEIF  "$(CFG)" == "ProTrekkr - Win32 Debug"
@@ -80,7 +80,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 kernel32.lib user32.lib sdl.lib sdl_draw.lib dsound.lib msacm32.lib winmm.lib advapi32.lib zlib.lib shlwapi.lib tinyxml.lib sdlmain.lib msvcrt.lib libcp.lib /nologo /subsystem:windows /pdb:none /debug /machine:I386 /nodefaultlib /out:"release/distrib/ptk_win.exe"
+# ADD LINK32 kernel32.lib user32.lib sdl.lib sdl_draw.lib dsound.lib msacm32.lib winmm.lib advapi32.lib zlib.lib shlwapi.lib sdlmain.lib msvcrt.lib libcp.lib opengl32.lib /nologo /subsystem:windows /pdb:none /debug /machine:I386 /nodefaultlib /out:"release/distrib/ptk_win.exe"
 
 !ENDIF 
 
@@ -371,28 +371,16 @@ SOURCE=.\src\ui\include\draw_primitives.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\src\ui\include\gadgets.h
-# End Source File
-# Begin Source File
-
 SOURCE=.\src\UI\include\Misc_Draw.h
 # End Source File
 # Begin Source File
 
 SOURCE=.\src\ui\include\requesters.h
 # End Source File
-# Begin Source File
-
-SOURCE=.\src\UI\include\xml.h
-# End Source File
 # End Group
 # Begin Source File
 
 SOURCE=.\src\ui\draw_primitives.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=.\src\ui\gadgets.cpp
 # End Source File
 # Begin Source File
 

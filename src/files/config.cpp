@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2022 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -45,12 +45,14 @@ extern int Cur_Height;
 extern int Continuous_Scroll;
 extern char AutoSave;
 extern char AutoBackup;
+extern char AutoReload;
 extern char Scopish_LeftRight;
 extern char Jazz_Edit;
 extern char Accidental;
 extern char Use_Shadows;
 extern char Global_Patterns_Font;
 extern char *cur_dir;
+extern char Last_Used_Ptk[MAX_PATH];
 
 // ------------------------------------------------------
 // Save the configuration file
@@ -59,12 +61,13 @@ void Save_Config(void)
     FILE *out;
     char extension[10];
     char FileName[MAX_PATH];
+    char Temph[MAX_PATH];
     int i;
     int Real_Palette_Idx;
     char KeyboardName[MAX_PATH];
     signed char phony = -1;
 
-    sprintf(extension, "PROTCFGF");
+    sprintf(extension, "PROTCFGG");
     Status_Box("Saving 'ptk.cfg'...");
 
     sprintf(FileName, "%s" SLASH "ptk.cfg", ExePath);
@@ -108,7 +111,8 @@ void Save_Config(void)
         Write_Data_Swap(&Continuous_Scroll, sizeof(Continuous_Scroll), 1, out);
         Write_Data(&AutoSave, sizeof(AutoSave), 1, out);
         Write_Data(&AutoBackup, sizeof(AutoBackup), 1, out);
-        
+        Write_Data(&AutoReload, sizeof(AutoReload), 1, out);
+
         Write_Data(&Dir_Mods, sizeof(Dir_Mods), 1, out);
         Write_Data(&Dir_Instrs, sizeof(Dir_Instrs), 1, out);
         Write_Data(&Dir_Presets, sizeof(Dir_Presets), 1, out);
@@ -116,6 +120,11 @@ void Save_Config(void)
         Write_Data(&Dir_MidiCfg, sizeof(Dir_MidiCfg), 1, out);
         Write_Data(&Dir_Patterns, sizeof(Dir_Patterns), 1, out);
         Write_Data(&Dir_Samples, sizeof(Dir_Samples), 1, out);
+
+        memset(Temph, 0, MAX_PATH);
+        sprintf(Temph, "%s" SLASH "%s.ptk", Dir_Mods, name);
+        Write_Data(Temph, MAX_PATH, 1, out);
+
         Write_Data(KeyboardName, MAX_PATH, 1, out);
 
         Write_Data(&rawrender_32float, sizeof(char), 1, out);
@@ -123,7 +132,7 @@ void Save_Config(void)
         Write_Data(&rawrender_target, sizeof(char), 1, out);
         Write_Data(&Large_Patterns, sizeof(char), 1, out);
         Write_Data(&Scopish_LeftRight, sizeof(char), 1, out);
- 
+
         Write_Data(&Paste_Across, sizeof(char), 1, out);
         Write_Data(&Jazz_Edit, sizeof(char), 1, out);
         Write_Data(&Accidental, sizeof(char), 1, out);
@@ -149,7 +158,7 @@ void Save_Config(void)
         Read_SMPT();
         last_index = -1;
         Actualize_Files_List(0);
-        Status_Box("Configuration file saved succesfully.");  
+        Status_Box("Configuration file saved succesfully.");
     }
     else
     {
@@ -181,7 +190,7 @@ void Load_Config(void)
         char extension[10];
 
         Read_Data(extension, sizeof(char), 9, in);
-        if(strcmp(extension, "PROTCFGF") == 0)
+        if(strcmp(extension, "PROTCFGG") == 0)
         {
             Read_Data_Swap(&Current_Edit_Steps, sizeof(Current_Edit_Steps), 1, in);
             Read_Data_Swap(&patt_highlight, sizeof(patt_highlight), 1, in);
@@ -216,6 +225,8 @@ void Load_Config(void)
             Read_Data_Swap(&Continuous_Scroll, sizeof(Continuous_Scroll), 1, in);
             Read_Data(&AutoSave, sizeof(AutoSave), 1, in);
             Read_Data(&AutoBackup, sizeof(AutoBackup), 1, in);
+            Read_Data(&AutoReload, sizeof(AutoReload), 1, in);
+
             Read_Data(&Dir_Mods, sizeof(Dir_Mods), 1, in);
             Read_Data(&Dir_Instrs, sizeof(Dir_Instrs), 1, in);
             Read_Data(&Dir_Presets, sizeof(Dir_Presets), 1, in);
@@ -223,6 +234,9 @@ void Load_Config(void)
             Read_Data(&Dir_MidiCfg, sizeof(Dir_MidiCfg), 1, in);
             Read_Data(&Dir_Patterns, sizeof(Dir_Patterns), 1, in);
             Read_Data(&Dir_Samples, sizeof(Dir_Samples), 1, in);
+
+            Read_Data(&Last_Used_Ptk, sizeof(Last_Used_Ptk), 1, in);
+
             Read_Data(KeyboardName, MAX_PATH, 1, in);
 
             Read_Data(&rawrender_32float, sizeof(char), 1, in);
@@ -262,26 +276,30 @@ void Load_Config(void)
             Read_Data_Swap(&Cur_Left, sizeof(int), 1, in);
             Read_Data_Swap(&Cur_Top, sizeof(int), 1, in);
             Desktop = SDL_SetVideoMode(0, 0, 0, 0);
-            // Check if the coords are too big
-            if(Cur_Width > SDL_GetVideoSurface()->w)
+            if(Desktop)
             {
-                Cur_Left = 0;
-                Cur_Width = SDL_GetVideoSurface()->w;
+                // Check if the coords are too big
+                if(Cur_Width > SDL_GetVideoSurface()->w)
+                {
+                    Cur_Left = 0;
+                    Cur_Width = SDL_GetVideoSurface()->w;
+                }
+                if(Cur_Height > SDL_GetVideoSurface()->h)
+                {
+                    Cur_Top = 0;
+                    Cur_Height = SDL_GetVideoSurface()->h;
+                }
+                if(Cur_Left == -1 ||
+                   Cur_Top == -1)
+                {
+                    Cur_Left = SDL_GetVideoSurface()->w;
+                    Cur_Top = SDL_GetVideoSurface()->h;
+                    Cur_Left = (Cur_Left - Cur_Width) / 2;
+                    Cur_Top = (Cur_Top - Cur_Height) / 2;
+                }
+                SDL_FreeSurface(Desktop);
             }
-            if(Cur_Height > SDL_GetVideoSurface()->h)
-            {
-                Cur_Top = 0;
-                Cur_Height = SDL_GetVideoSurface()->h;
-            }
-            if(Cur_Left == -1 ||
-               Cur_Top == -1)
-            {
-                Cur_Left = SDL_GetVideoSurface()->w;
-                Cur_Top = SDL_GetVideoSurface()->h;
-                Cur_Left = (Cur_Left - Cur_Width) / 2;
-                Cur_Top = (Cur_Top - Cur_Height) / 2;
-            }
-            SDL_FreeSurface(Desktop);
+
 #ifndef __MORPHOS__
             sprintf(Win_Coords,
                     "SDL_VIDEO_WINDOW_POS=%d,%d",
@@ -289,6 +307,7 @@ void Load_Config(void)
                     Cur_Top);
             SDL_putenv(Win_Coords);
 #endif
+
         }
         fclose(in);
     }

@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2022 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -1739,23 +1739,19 @@ void Gui_Draw_Button_Box(int x, int y, int sx, int sy, const char *str, int flag
             {
                 SetColor(COL_STATIC_MED);
                 Fillrect(x, y, x2, y2 + 1);
-                SetColor(COL_STATIC_HI);
-                DrawLine(x, y, x2 - 1, y);
-                DrawLine(x, y, x, y2);
-                SetColor(COL_STATIC_LO);
-                DrawLine(x, y2, x2, y2);
-                DrawLine(x2, y, x2, y2);
+                DrawHLine(y, x, x2 - 1, COL_STATIC_HI);
+                DrawVLine(x, y, y2, COL_STATIC_HI);
+                DrawHLine(y2, x, x2, COL_STATIC_LO);
+                DrawVLine(x2, y, y2, COL_STATIC_LO);
             }
             else
             {
                 SetColor(Colors_Norm[Col_Idx]);
                 Fillrect(x, y, x2, y2 + 1);
-                SetColor(Colors_Norm[Col_Idx + 1]);
-                DrawLine(x, y, x2 - 1, y);
-                DrawLine(x, y, x, y2);
-                SetColor(Colors_Norm[Col_Idx + 2]);
-                DrawLine(x, y2, x2, y2);
-                DrawLine(x2, y, x2, y2);
+                DrawHLine(y, x, x2 - 1, Colors_Norm[Col_Idx + 1]);
+                DrawVLine(x, y, y2, Colors_Norm[Col_Idx + 1]);
+                DrawHLine(y2, x, x2, Colors_Norm[Col_Idx + 2]);
+                DrawVLine(x2, y, y2, Colors_Norm[Col_Idx + 2]);
             }
         }
         else
@@ -1764,23 +1760,19 @@ void Gui_Draw_Button_Box(int x, int y, int sx, int sy, const char *str, int flag
             {
                 SetColor(COL_STATIC_MED);
                 Fillrect(x, y, x2, y2 + 1);
-                SetColor(COL_STATIC_LO);
-                DrawLine(x, y, x2 - 1, y);
-                DrawLine(x, y, x, y2);
-                SetColor(COL_STATIC_HI);
-                DrawLine(x, y2, x2, y2);
-                DrawLine(x2, y, x2, y2);
+                DrawHLine(y, x, x2 - 1, COL_STATIC_LO);
+                DrawVLine(x, y, y2, COL_STATIC_LO);
+                DrawHLine(y2, x, x2, COL_STATIC_HI);
+                DrawVLine(x2, y, y2, COL_STATIC_HI);
             }
             else
             {
                 SetColor(Colors_Pushed[Col_Idx]);
                 Fillrect(x, y, x2, y2 + 1);
-                SetColor(Colors_Pushed[Col_Idx + 2]);
-                DrawLine(x, y, x2 - 1, y);
-                DrawLine(x, y, x, y2);
-                SetColor(Colors_Pushed[Col_Idx + 1]);
-                DrawLine(x, y2, x2, y2);
-                DrawLine(x2, y, x2, y2);
+                DrawHLine(y, x, x2 - 1, Colors_Pushed[Col_Idx + 2]);
+                DrawVLine(x, y, y2, Colors_Pushed[Col_Idx + 2]);
+                DrawHLine(y2, x, x2, Colors_Pushed[Col_Idx + 1]);
+                DrawVLine(x2, y, y2, Colors_Pushed[Col_Idx + 1]);
             }
         }
     }
@@ -2697,7 +2689,7 @@ void Create_Pattern_font(SDL_Surface *Dest, int offset,
     int j;
 
     // Create the pattern font
-    Copy_To_Surface(PFONT, Dest, 0, 0, 0, offset, 316, offset + 8);
+    Copy_To_Surface(PFONT, Dest, 0, 0, 0, offset, 320, offset + 8);
 
     // Set the base colors
     while(SDL_LockSurface(Dest) < 0);
@@ -2748,7 +2740,7 @@ void Create_Pattern_font(SDL_Surface *Dest, int offset,
     SDL_UnlockSurface(Dest);
 
     // Blank line
-    Copy_To_Surface(PFONT, Dest, 0, 16, 0, 7, 316, 7 + 1);
+    Copy_To_Surface(PFONT, Dest, 0, 16, 0, 7, 320, 7 + 1);
 
     while(SDL_LockSurface(Dest) < 0);
 
@@ -2867,7 +2859,7 @@ void Create_Pattern_font(SDL_Surface *Dest, int offset,
     SDL_UnlockSurface(Dest);
 
     // Markers arrows
-    Copy_To_Surface(PFONT, Dest, 0, 64, 0, 8, 316, 8 + 7);
+    Copy_To_Surface(PFONT, Dest, 0, 64, 0, 8, 320, 8 + 7);
 }
 
 // ------------------------------------------------------
@@ -2944,7 +2936,7 @@ int Set_Pictures_Colors(void)
         Palette_Pointer[i].b = Pic_Palette->colors[i].b;
         Palette_Pointer[i].unused = Pic_Palette->colors[i].unused;
     }
-
+    
     Pic_Palette = LOGOPIC->format->palette;
     for(i = 0; i < max_colors_logo; i++)
     {
@@ -2964,12 +2956,12 @@ int Set_Pictures_Colors(void)
     }
     max_colors_Pointer++;
 
-    Temp_PFONT = SDL_AllocSurface(SDL_SWSURFACE, 316, 87 * 2, 8, 0, 0, 0, 0xff);
-    Temp_LARGEPFONT = SDL_AllocSurface(SDL_SWSURFACE, 316, 87 * 2, 8, 0, 0, 0, 0xff);
-    Temp_SMALLPFONT = SDL_AllocSurface(SDL_SWSURFACE, 316, 87 * 2, 8, 0, 0, 0, 0xff);
-    Temp_NOTEPFONT = SDL_AllocSurface(SDL_SWSURFACE, 316, 87 * 2, 8, 0, 0, 0, 0xff);
-    Temp_NOTELARGEPFONT = SDL_AllocSurface(SDL_SWSURFACE, 316, 87 * 2, 8, 0, 0, 0, 0xff);
-    Temp_NOTESMALLPFONT = SDL_AllocSurface(SDL_SWSURFACE, 316, 87 * 2, 8, 0, 0, 0, 0xff);
+    Temp_PFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
+    Temp_LARGEPFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
+    Temp_SMALLPFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
+    Temp_NOTEPFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
+    Temp_NOTELARGEPFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
+    Temp_NOTESMALLPFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
 
     Pointer_BackBuf = (unsigned char *) malloc(POINTER->pitch * POINTER->h * sizeof(unsigned char));
     memset(Pointer_BackBuf, 0, POINTER->pitch * POINTER->h * sizeof(unsigned char));
@@ -3060,7 +3052,7 @@ void Init_UI(void)
 // Free the allocated resources
 void Destroy_UI(void)
 {
-    if(Pointer_BackBuf) free(Pointer_BackBuf);
+   if(Pointer_BackBuf) free(Pointer_BackBuf);
 }
 
 // ------------------------------------------------------

@@ -2,7 +2,7 @@
 // Protrekkr
 // Based on Juan Antonio Arguelles Rius's NoiseTrekker.
 //
-// Copyright (C) 2008-2022 Franck Charlet.
+// Copyright (C) 2008-2024 Franck Charlet.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -35,6 +35,7 @@
 // ------------------------------------------------------
 // Includes
 #include <SDL/SDL.h>
+#include <SDL/SDL_syswm.h>
 #include <SDL/SDL_syswm.h>
 
 #include "../../include/version.h"
