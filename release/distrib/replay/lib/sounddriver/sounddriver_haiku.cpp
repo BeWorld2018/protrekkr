@@ -50,7 +50,7 @@ Uint32 Amount;
 
 int AUDIO_SoundBuffer_Size;
 int AUDIO_Latency;
-int AUDIO_Milliseconds = 20;
+int AUDIO_Milliseconds = 10;
 int AUDIO_16Bits;
 
 // ------------------------------------------------------
@@ -64,7 +64,7 @@ void AUDIO_Synth_Play(void);
 // ------------------------------------------------------
 // Name: AUDIO_Thread()
 // Desc: Audio rendering
-static void AUDIO_Callback(void* cookie, void* inBuffer, size_t byteCount, BStreamingGameSound* device)
+static void AUDIO_Callback(void *cookie, void *inBuffer, size_t byteCount, BStreamingGameSound *device)
 {
 	assert(byteCount != 0);
     if(AUDIO_Play_Flag)

@@ -60,7 +60,7 @@ pthread_t hThread;
 
 int AUDIO_SoundBuffer_Size;
 int AUDIO_Latency;
-int AUDIO_Milliseconds = 100;
+int AUDIO_Milliseconds = 10;
 
 // ------------------------------------------------------
 // Functions
@@ -259,20 +259,20 @@ void AUDIO_Wait_For_Thread(void)
             while(AUDIO_Acknowledge)
             {
                 usleep(10);
-            };
+            }
         }
         else
         {
         #if defined(USE_SDL_THREADS)
             if(hThread)     // sdl thread
         #else
-            if(hThread.p)   // pthreads
+            if(hThread)     // pthreads
         #endif
             {
                 while(!AUDIO_Acknowledge)
                 {
                     usleep(10);
-                };
+                }
             }
         }
     }
@@ -340,7 +340,7 @@ void AUDIO_Stop_Sound_Buffer(void)
     #if defined(USE_SDL_THREADS)
         if(hThread) //sdl thread
     #else
-        if(hThread.p) //pthreads
+        if(hThread) //pthreads
     #endif
     {
         Thread_Running = 0;

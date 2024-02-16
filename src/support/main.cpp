@@ -101,7 +101,9 @@ int Startup_Height;
 extern int Display_Pointer;
 int Burn_Title;
 SDL_Surface *Main_Screen;
+#if defined(__WIN32__)
 SDL_SysWMinfo WMInfo;
+#endif
 int Prog_End;
 MOUSE Mouse;
 unsigned short Keys[SDLK_LAST];
@@ -610,6 +612,13 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
         SDL_Quit();
         exit(0);
     }
+
+    if(FullScreen)
+    {
+        Save_Cur_Width = SCREEN_WIDTH;
+        Save_Cur_Height = SCREEN_HEIGHT;
+    }
+
     Ptk_Palette[0].r = Save_R;
     Ptk_Palette[0].g = Save_G;
     Ptk_Palette[0].b = Save_B;
@@ -915,11 +924,14 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
             }
         }
 
+#if defined(__MACOSX__)
         if(Display_Pointer) Display_Mouse_Pointer(Mouse.old_x, Mouse.old_y, TRUE);
-
+#endif
         if(!Screen_Update()) break;
 
+#if defined(__MACOSX__)
         if(Display_Pointer) Display_Mouse_Pointer(Mouse.x, Mouse.y, FALSE);
+#endif
 
         // Flush all pending blits
         if(Nbr_Update_Rects)
@@ -977,6 +989,7 @@ int Switch_FullScreen(int Width, int Height)
         if((Main_Screen = SDL_SetVideoMode(Startup_Width,
                                            Startup_Height,
                                            SCREEN_BPP,
+                                           SDL_SWSURFACE |
                                            (FullScreen ? SDL_FULLSCREEN : 0))) == NULL)
         {
             return(FALSE);
@@ -988,7 +1001,6 @@ int Switch_FullScreen(int Width, int Height)
     }
     else
     {
-
         if(Save_Cur_Width != -1)
         {
             Width = Save_Cur_Width;
@@ -997,6 +1009,7 @@ int Switch_FullScreen(int Width, int Height)
         if((Main_Screen = SDL_SetVideoMode(Width, Height,
                                            SCREEN_BPP,
                                            SDL_RESIZABLE |
+                                           SDL_SWSURFACE |
                                            (FullScreen ? SDL_FULLSCREEN : 0))) == NULL)
         {
             return(FALSE);
@@ -1023,14 +1036,10 @@ int Switch_FullScreen(int Width, int Height)
     // Flush any pending rects
     Nbr_Update_Rects = 0;
 
-#ifndef __MORPHOS__
-    // Obtain SDL window
-    SDL_GetWMInfo(&WMInfo);
-#endif
-
 #if defined(__WIN32__)
     HICON hIcon;
     HICON hIconSmall;
+    SDL_GetWMInfo(&WMInfo);
     Main_Window = WMInfo.window;
     HINSTANCE ApphInstance = GetModuleHandle(0);
     hIcon = LoadIcon(ApphInstance, MAKEINTRESOURCE(IDI_ICON));
@@ -1042,6 +1051,9 @@ int Switch_FullScreen(int Width, int Height)
 
     Init_UI();
 
+#if defined(__MACOSX__)
     SDL_ShowCursor(0);
+#endif
+
     return(TRUE);
 }

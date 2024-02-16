@@ -49,7 +49,7 @@ int volatile Thread_Running;
 int AUDIO_SoundBuffer_Size;
 
 int AUDIO_Latency;
-int AUDIO_Milliseconds = 20;
+int AUDIO_Milliseconds = 10;
 int AUDIO_FlipFlop = 0;
 
 // ------------------------------------------------------
@@ -211,7 +211,7 @@ void AUDIO_Wait_For_Thread(void)
             while(AUDIO_Acknowledge)
             {
                 usleep(10);
-            };
+            }
         }
         else
         {
@@ -220,7 +220,7 @@ void AUDIO_Wait_For_Thread(void)
                 while(!AUDIO_Acknowledge)
                 {
                     usleep(10);
-                };
+                }
             }
         }
     }
