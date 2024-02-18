@@ -5,6 +5,8 @@
 *.mingw*
 *.freebsd*
 *.netbsd*
+*x86*
+*ia64*
 *.dsw*
 *.dsp*
 *.sln*
@@ -22,7 +24,6 @@
 *.psm*
 *.ppb*
 *.303*
-*.lib*
 *.plg*
 *.map*
 *.ncb*

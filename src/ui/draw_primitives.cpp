@@ -48,7 +48,9 @@ extern char *Font_Ascii;
 extern int Nbr_Letters;
 extern int Font_Pos[256];
 extern int Font_Size[256];
+#if defined(__MACOSX_PPC__)
 extern unsigned char *Pointer_BackBuf;
+#endif
 int FgColor;
 
 int Nbr_Update_Rects;
@@ -107,64 +109,51 @@ void UISetPalette(SDL_Color *Palette, int Amount)
 {
     if(FONT_LOW)
     {
-        SDL_SetPalette(FONT_LOW, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(FONT_LOW, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(FONT)
     {
-        SDL_SetPalette(FONT, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(FONT, SDL_LOGPAL, Palette, 0, Amount);
-    }
-    if(PFONT)
-    {
-        SDL_SetPalette(PFONT, SDL_PHYSPAL, Palette, 0, Amount);
-        SDL_SetPalette(PFONT, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(SKIN303)
     {
-        SDL_SetPalette(SKIN303, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(SKIN303, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(LOGOPIC)
     {
-        SDL_SetPalette(LOGOPIC, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(LOGOPIC, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(Temp_PFONT)
     {
-        SDL_SetPalette(Temp_PFONT, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(Temp_PFONT, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(Temp_LARGEPFONT)
     {
-        SDL_SetPalette(Temp_LARGEPFONT, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(Temp_LARGEPFONT, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(Temp_SMALLPFONT)
     {
-        SDL_SetPalette(Temp_SMALLPFONT, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(Temp_SMALLPFONT, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(Temp_NOTEPFONT)
     {
-        SDL_SetPalette(Temp_NOTEPFONT, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(Temp_NOTEPFONT, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(Temp_NOTELARGEPFONT)
     {
-        SDL_SetPalette(Temp_NOTELARGEPFONT, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(Temp_NOTELARGEPFONT, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(Temp_NOTESMALLPFONT)
     {
-        SDL_SetPalette(Temp_NOTESMALLPFONT, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(Temp_NOTESMALLPFONT, SDL_LOGPAL, Palette, 0, Amount);
     }
+
+#if defined(__MACOSX_PPC__)
     if(POINTER)
     {
-        SDL_SetPalette(POINTER, SDL_PHYSPAL, Palette, 0, Amount);
         SDL_SetPalette(POINTER, SDL_LOGPAL, Palette, 0, Amount);
     }
+#endif
 
     SDL_SetPalette(Main_Screen, SDL_PHYSPAL, Palette, 0, Amount);
     SDL_SetPalette(Main_Screen, SDL_LOGPAL, Palette, 0, Amount);
@@ -287,11 +276,26 @@ void PrintString(int x,
 
 // ------------------------------------------------------
 // Display or clear the mouse pointer at given coordinates
+#if defined(__MACOSX_PPC__)
 void Display_Mouse_Pointer(int x, int y, int clear)
 {
+    int was_locked;
+    int main_was_locked;
+
     if(x >= Cur_Width) return;
     if(y >= Cur_Height) return;
-    while(SDL_LockSurface(POINTER) < 0);
+    
+    main_was_locked = FALSE;
+    if(SDL_MUSTLOCK(Main_Screen))
+    {
+        if(!SDL_LockSurface(Main_Screen)) main_was_locked = TRUE;
+    }
+
+    was_locked = FALSE;
+    if(SDL_MUSTLOCK(POINTER))
+    {
+        if(!SDL_LockSurface(POINTER)) was_locked = TRUE;
+    }
 
     int i;
     int j;
@@ -331,9 +335,20 @@ void Display_Mouse_Pointer(int x, int y, int clear)
             }
         }
     }
-    SDL_UnlockSurface(POINTER);
+
+    if(was_locked)
+    {
+        SDL_UnlockSurface(POINTER);
+    }
+
+    if(main_was_locked)
+    {
+        SDL_UnlockSurface(Main_Screen);
+    }
+
     Push_Update_Rect(x, y, POINTER->w, POINTER->h);
 }
+#endif
 
 // ------------------------------------------------------
 // See if a rect have to be scheduled or not

@@ -147,16 +147,16 @@
 #define X_ "\245"
 #define Y_ "\246"
 #define Z_ "\247"
-#define _0 "\360"
-#define _1 "\361"
-#define _2 "\362"
-#define _3 "\363"
-#define _4 "\364"
-#define _5 "\365"
-#define _6 "\366"
-#define _7 "\367"
-#define _8 "\370"
-#define _9 "\372"
+#define __0 "\360"
+#define __1_ "\361"
+#define __2 "\362"
+#define __3 "\363"
+#define __4 "\364"
+#define __5 "\365"
+#define __6 "\366"
+#define __7 "\367"
+#define __8 "\370"
+#define __9 "\372"
 #define DOT_ "\250"
 #define TIR_ "\251"
 #define SPC_ "\252"
@@ -270,7 +270,9 @@ void Init_UI(void);
 void Get_Phony_Palette(void);
 void Set_Phony_Palette(void);
 void Restore_Default_Palette(SDL_Color *Def, int DefBevel);
+#if defined(__MACOSX_PPC__)
 void Display_Mouse_Pointer(int x, int y, int clear);
+#endif
 void Destroy_UI(void);
 int Get_Font_Height(void);
 int Get_Note_Ascii(int note, char *snote, int *octave, int tiret);

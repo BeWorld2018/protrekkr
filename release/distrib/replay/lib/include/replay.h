@@ -45,7 +45,9 @@
 #include "../sounddriver/include/sounddriver_netbsd.h"
 #elif defined(__LINUX__)
 #include "../sounddriver/include/sounddriver_linux.h"
-#elif defined(__MACOSX__)
+#elif defined(__MACOSX_PPC__)
+#include "../sounddriver/include/sounddriver_macosx.h"
+#elif defined(__MACOSX_X86__)
 #include "../sounddriver/include/sounddriver_macosx.h"
 #elif defined(__AROS__) || defined(__MORPHOS__)
 #include "../sounddriver/include/sounddriver_aros.h"
@@ -56,7 +58,7 @@
 #elif defined(__HAIKU__)
 #include "../sounddriver/include/sounddriver_haiku.h"
 #else
-#error "Can't work without a sound driver !"
+#error "No sound driver defined !"
 #endif
 #include "samples_unpack.h"
 #include "ptkreplay.h"
@@ -371,7 +373,7 @@ extern float Feedback;
 
 extern float lchorus_feedback;
 extern float rchorus_feedback;
-extern int shuffle;
+extern int shuffle_amount;
 
 extern char Chan_Active_State[256][16];
 extern char Chan_History_State[256][16];

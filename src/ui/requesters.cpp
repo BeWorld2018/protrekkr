@@ -234,7 +234,7 @@ int Display_Requester(LPREQUESTER Requester, int Action, char *Text, int Center)
     Pos_X = (CONSOLE_WIDTH - Size_X) / 2;
     Pos_Y = (CONSOLE_HEIGHT - Size_Y) / 2;
 
-    Req_Back = SDL_AllocSurface(SDL_SWSURFACE, Size_X + 1, Size_Y + 1, 32, 0xff0000, 0xff00, 0xff, 0xff000000);
+    Req_Back = SDL_AllocSurface(SDL_SWSURFACE, Size_X + 1, Size_Y + 1, 8, 0, 0, 0, 0xff);
     if(Req_Back)
     {
         Copy_To_Surface(Main_Screen, Req_Back, 0, 0,
@@ -413,10 +413,11 @@ void Restore_Background_Requester()
 {
     if(Req_Back)
     {
-        Copy_To_Surface(Req_Back, Main_Screen, Pos_X, Pos_Y,
-                        0, 0,
-                        Pos_X + Size_X + 1,
-                        Pos_Y + Size_Y + 1);
+        Copy(Req_Back,
+             Pos_X, Pos_Y,
+             0, 0,
+             Pos_X + Size_X + 1,
+             Pos_Y + Size_Y + 1);
         SDL_FreeSurface(Req_Back);
         Req_Back = NULL;
     }

@@ -102,7 +102,7 @@ void *AUDIO_Thread(void *arg)
         }
         usleep(10);
     }
-    Thread_Running = 1; 
+    Thread_Running = 1;
     pthread_exit(0);
     return(0);
 }
@@ -112,29 +112,14 @@ void *AUDIO_Thread(void *arg)
 // Desc: Init the audio driver
 int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
 {
-    const char *device;
+    struct sched_param p;
 
     AUDIO_Mixer = Mixer;
 
-    device = getenv("ALSA_DEVICE");
-    if(!device)
-    {
-        device = "default";
-    }
+    p.sched_priority = 1;
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &p);
 
-    if(snd_pcm_open(&playback_handle, device, SND_PCM_STREAM_PLAYBACK, 0) >= 0)
-    {
-        return(AUDIO_Create_Sound_Buffer(AUDIO_Milliseconds));
-    }
-    
-#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
-    else
-    {
-        Message_Error("Error while calling open \"snd_pcm_open()\"");
-    }
-#endif
-
-    return(FALSE);
+    return(AUDIO_Create_Sound_Buffer(AUDIO_Milliseconds));
 }
 
 // ------------------------------------------------------
@@ -142,29 +127,43 @@ int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
 // Desc: Create an audio buffer of given milliseconds
 int AUDIO_Create_Sound_Buffer(int milliseconds)
 {
+    const char *device;
     unsigned int frag_size;
-    struct sched_param p;
     unsigned int bitrate = AUDIO_PCM_FREQ;
 
+    device = getenv("ALSA_DEVICE");
+    if(!device)
+    {
+        device = "default";
+    }
+
+    if(snd_pcm_open(&playback_handle, device, SND_PCM_STREAM_PLAYBACK, 0) < 0)
+    {
+
+#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
+        Message_Error("Error while calling open \"snd_pcm_open()\"");
+#endif
+
+        return(FALSE);
+    }
+    
     if(milliseconds < 10) milliseconds = 10;
     if(milliseconds > 250) milliseconds = 250;
     // US = MS * 1000
-    frag_size = (int) (AUDIO_PCM_FREQ * (230 / 1000.0f));
+    frag_size = (int) (AUDIO_PCM_FREQ * (milliseconds / 100.0f));
     snd_pcm_set_params(playback_handle,
                        SND_PCM_FORMAT_S16_LE,
                        SND_PCM_ACCESS_RW_INTERLEAVED,
-		       AUDIO_DBUF_CHANNELS,
+                       AUDIO_DBUF_CHANNELS,
                        AUDIO_PCM_FREQ,
                        1,
-                       230000);
+                       milliseconds * 10000);
 
     AUDIO_SoundBuffer_Size = frag_size;
     AUDIO_Latency = AUDIO_SoundBuffer_Size;
     AUDIO_SoundBuffer = (short *) malloc(AUDIO_SoundBuffer_Size << 1);
 
-    p.sched_priority = 1;
     Thread_Running = 1;
-    pthread_setschedparam(pthread_self(), SCHED_FIFO , &p);
     if(pthread_create(&hThread, NULL, AUDIO_Thread, NULL) == 0)
     {
         return(TRUE);
@@ -272,6 +271,17 @@ void AUDIO_Stop_Sound_Buffer(void)
         {
             usleep(10);
         }
+        hThread = 0;
+    }
+    if(AUDIO_SoundBuffer)
+    {
+        free(AUDIO_SoundBuffer);
+        AUDIO_SoundBuffer = NULL;
+    }
+    if(playback_handle)
+    {
+        snd_pcm_close(playback_handle);
+        playback_handle = NULL;
     }
 }
 
@@ -281,10 +291,5 @@ void AUDIO_Stop_Sound_Buffer(void)
 void AUDIO_Stop_Driver(void)
 {
     AUDIO_Stop_Sound_Buffer();
-    if(playback_handle)
-    {
-        snd_pcm_close(playback_handle);
-    }
     playback_handle = NULL;
 }
-

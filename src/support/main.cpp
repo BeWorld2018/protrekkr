@@ -58,7 +58,7 @@
 #include <shlwapi.h>
 #endif
 
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
 #include <mach-o/dyld.h>
 #endif
 
@@ -98,7 +98,9 @@ REQUESTER Title_Requester =
 const SDL_VideoInfo *Screen_Info;
 int Startup_Width;
 int Startup_Height;
+#if defined(__MACOSX_PPC__)
 extern int Display_Pointer;
+#endif
 int Burn_Title;
 SDL_Surface *Main_Screen;
 #if defined(__WIN32__)
@@ -399,7 +401,7 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
     char Win_Coords[64];
     Uint32 ExePath_Size = MAX_PATH;
 
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
     Uint32 Path_Length;
 #endif
 
@@ -472,7 +474,7 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
     GETCWD(ExePath, MAX_PATH);
 
 #else
-    #if defined(__MACOSX__)
+    #if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
         Path_Length = ExePath_Size;
         _NSGetExecutablePath(ExePath, &Path_Length);
         while(Path_Length--)
@@ -724,7 +726,7 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
                         // Otherwise it doesn't work under Mac OSX
                         Keys_Unicode[Uni_Trans] = TRUE;
 
-#if !defined(__MACOSX__)
+#if !defined(__MACOSX_PPC__) && !defined(__MACOSX_X86__)
                         if(!Uni_Trans) Uni_Trans = Symbol;
 #else
                         Uni_Trans = Symbol;
@@ -924,19 +926,20 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
             }
         }
 
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__)
         if(Display_Pointer) Display_Mouse_Pointer(Mouse.old_x, Mouse.old_y, TRUE);
 #endif
+
         if(!Screen_Update()) break;
 
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__)
         if(Display_Pointer) Display_Mouse_Pointer(Mouse.x, Mouse.y, FALSE);
 #endif
 
         // Flush all pending blits
         if(Nbr_Update_Rects)
         {
-            SDL_UpdateRects(Main_Screen, Nbr_Update_Rects, Update_Stack);
+           SDL_UpdateRects(Main_Screen, Nbr_Update_Rects, Update_Stack);
         }
         Nbr_Update_Rects = 0;
 
@@ -959,7 +962,7 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
     }
     Save_Config();
 
-	if(ExePath) free(ExePath);
+    if(ExePath) free(ExePath);
 
     exit(0);
 }
@@ -989,7 +992,7 @@ int Switch_FullScreen(int Width, int Height)
         if((Main_Screen = SDL_SetVideoMode(Startup_Width,
                                            Startup_Height,
                                            SCREEN_BPP,
-                                           SDL_SWSURFACE |
+                                           SDL_SWSURFACE | SDL_PREALLOC | SDL_HWPALETTE |
                                            (FullScreen ? SDL_FULLSCREEN : 0))) == NULL)
         {
             return(FALSE);
@@ -1009,7 +1012,7 @@ int Switch_FullScreen(int Width, int Height)
         if((Main_Screen = SDL_SetVideoMode(Width, Height,
                                            SCREEN_BPP,
                                            SDL_RESIZABLE |
-                                           SDL_SWSURFACE |
+                                           SDL_SWSURFACE | SDL_PREALLOC | SDL_HWPALETTE |
                                            (FullScreen ? SDL_FULLSCREEN : 0))) == NULL)
         {
             return(FALSE);
@@ -1051,7 +1054,7 @@ int Switch_FullScreen(int Width, int Height)
 
     Init_UI();
 
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__)
     SDL_ShowCursor(0);
 #endif
 

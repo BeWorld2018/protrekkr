@@ -915,12 +915,12 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
                                     Store_FX_RevReso = TRUE;
                                     break;
 
-                                // $28 Switch tracker LFO
+                                // $28 Switch track LFO
                                 case 0x28:
                                     Store_FX_SwitchTrackLFO = TRUE;
                                     break;
 
-                                // $29 Switch tracker LFO
+                                // $29 Switch track compressor
                                 case 0x29:
                                     if(TmpPatterns_Notes[i + 1] & TRUE)
                                     {
@@ -1815,7 +1815,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     Write_Mod_Data(&lchorus_feedback, sizeof(float), 1, in);
     Write_Mod_Data(&rchorus_feedback, sizeof(float), 1, in);
 
-    Write_Mod_Data(&shuffle, sizeof(int), 1, in);
+    Write_Mod_Data(&shuffle_amount, sizeof(int), 1, in);
 
     Save_Constant("PTK_TRACKFILTERS", Store_TrackFilters);
 
@@ -1853,7 +1853,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     Save_Constant("PTK_PROC_FILTERHP", Store_Filter_Hp12M | Store_Filter_Hp12S | Store_Filter_Hp24M);
     Save_Constant("PTK_PROC_FILTERHP2", Store_Filter_Hp12S | Store_Filter_Hp24M);
 
-    Save_Constant("PTK_SHUFFLE", shuffle != 0 ? TRUE : FALSE || Store_FX_Shuffle);
+    Save_Constant("PTK_SHUFFLE", shuffle_amount != 0 ? TRUE : FALSE || Store_FX_Shuffle);
     
     Save_Constant("PTK_COMPRESSOR", compressor);
 

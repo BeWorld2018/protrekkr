@@ -607,7 +607,7 @@ int glide;
 float Sample_Vol[MAX_INSTRS];
 unsigned int SubCounter;
 unsigned int SamplesPerSub;
-int shuffle;
+int shuffle_amount;
 
 #if defined(PTK_SHUFFLE)
 int shufflestep;
@@ -948,12 +948,12 @@ void Reset_Values(void);
 // Audio mixer
 void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
 {
-#if defined(__MACOSX__)
+
+#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
     float *pSamples_flt = (float *) Buffer;
-    short *pSamples_int = (short *) Buffer;
-#else
-    short *pSamples = (short *) Buffer;
 #endif
+
+    short *pSamples = (short *) Buffer;
     int i;
 
 #if !defined(__STAND_ALONE__)
@@ -966,8 +966,8 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
     {
 #endif
 
-#if defined(__MACOSX__)
-        for(i = Len - 1; i >= 0; i -= AUDIO_16Bits ? 4 : 8)
+#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
+        for(i = Len - 1; i >= 0; i -= 8)
 #else
         for(i = Len - 1; i >= 0; i -= 4)
 #endif
@@ -991,18 +991,10 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
                            (Metronome_Dats[(metronome_internal_counter_int * 2)] & 0xff);
                 Right_Dat = Left_Dat;
 
-#if defined(__MACOSX__)
-                if(AUDIO_16Bits)
-                {
-                    left_value += Left_Dat;
-                    right_value += Right_Dat;
-                }
-                else
-                {
-                    // ([1.0..-1.0f])
-                    left_float += (float) (Left_Dat) / 32767.0f;
-                    right_float += (float) (Right_Dat) / 32767.0f;
-                }
+#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
+                // ([1.0..-1.0f])
+                left_float += (float) (Left_Dat) / 32767.0f;
+                right_float += (float) (Right_Dat) / 32767.0f;
 #else
                 left_value += Left_Dat;
                 right_value += Right_Dat;
@@ -1019,17 +1011,9 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
 #endif
 #endif
 
-#if defined(__MACOSX__)
-            if(AUDIO_16Bits)
-            {
-                *pSamples_int++ = left_value;
-                *pSamples_int++ = right_value;
-            }
-            else
-            {
-                *pSamples_flt++ = left_float;
-                *pSamples_flt++ = right_float;
-            }
+#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
+            *pSamples_flt++ = left_float;
+            *pSamples_flt++ = right_float;
 #else
             *pSamples++ = left_value;
             *pSamples++ = right_value;
@@ -1058,6 +1042,7 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
             if(pos_scope >= (AUDIO_Latency / 2)) pos_scope = 0;
             pos_scope_latency = pos_scope - (AUDIO_Latency / 4);
             if(pos_scope_latency < 0) pos_scope_latency = (AUDIO_Latency / 2) + pos_scope_latency;
+            if(pos_scope_latency < 0) pos_scope_latency = 0;
 #endif
         }
 
@@ -1685,7 +1670,7 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
         Mod_Dat_Read(&lchorus_feedback, sizeof(float));
         Mod_Dat_Read(&rchorus_feedback, sizeof(float));
 
-        Mod_Dat_Read(&shuffle, sizeof(int));
+        Mod_Dat_Read(&shuffle_amount, sizeof(int));
 
         // Reading track part sequence
         for(int tps_pos = 0; tps_pos < Song_Length; tps_pos++)
@@ -2039,7 +2024,7 @@ void PTKEXPORT Ptk_Stop(void)
     {
         local_ramp_vol = 0.0f;
 
-#if defined(__MACOSX__) || defined(__LINUX__) || defined(__AROS__) || defined(__AMIGAOS4__)
+#if defined(__MACOSX_PPC__) || defined(__LINUX__) || defined(__AROS__) || defined(__AMIGAOS4__)
         usleep(10);
 #endif
 #if defined(__WIN32__)
@@ -2077,7 +2062,7 @@ void Pre_Song_Init(void)
     sprintf(style, "Anything Goes");
 #endif
 
-    shuffle = 0;
+    shuffle_amount = 0;
     
     for(int ini = 0; ini < MAX_TRACKS; ini++)
     {
@@ -2154,6 +2139,7 @@ void Pre_Song_Init(void)
     tb303engine[0].reset();
     tb303engine[1].reset();
 #endif
+
     for(i = 0; i < MAX_INSTRS; i++)
     {
         Sample_Vol[i] = 1.0f;
@@ -2414,9 +2400,11 @@ void Post_Song_Init(void)
         Delays_Pos_Sound_Buffer[i].Line = 0;
         Delays_Pos_Sound_Buffer[i].Pos = 0;
         Delays_Pos_Sound_Buffer[i].SamplesPerTick = 0;
+
 #if defined(PTK_SHUFFLE)
         Delays_Pos_Sound_Buffer[i].shufflestep = 0;
 #endif
+
     }
 }
 
@@ -2428,6 +2416,7 @@ void Record_Delay_Event()
 #if defined(PTK_SHUFFLE)
     Delays_Pos_Sound_Buffer[Cur_Delay_Sound_Buffer].shufflestep = shufflestep;
 #endif
+
     Delays_Pos_Sound_Buffer[Cur_Delay_Sound_Buffer].SamplesPerTick = SamplesPerTick;
     Delays_Pos_Sound_Buffer[Cur_Delay_Sound_Buffer].Line = Pattern_Line;
     Delays_Pos_Sound_Buffer[Cur_Delay_Sound_Buffer].Pos = Song_Position;
@@ -2487,14 +2476,18 @@ void Sp_Player(void)
     int i;
     int j;
     int trigger_note_off;
+
 #if defined(PTK_SYNTH) || defined(PTK_INSTRUMENTS)
     float dest_volume;
 #endif
+
     int toffset;
     int free_sub_channel;
+
 #if defined(PTK_FX_SETVOLUME)
     int no_fx3;
 #endif
+
     int Glide_Synth[MAX_POLYPHONY];
 
 #if defined(PTK_TRACKFILTERS)
@@ -4501,7 +4494,7 @@ void Do_Effects_Tick_0(void)
 
 #if defined(PTK_SHUFFLE)
                 case 0x25:
-                    shuffle = (int) ((float) pltr_dat_row[j] * 0.39216f);
+                    shuffle_amount = (int) ((float) pltr_dat_row[j] * 0.39216f);
                     Update_Shuffle();
 
 #if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
@@ -5446,18 +5439,8 @@ void Get_Player_Values(void)
     right_float_render = right_float;
 #endif
 
-    // It looks like the maximum range for OSS is -8192 +8192
-    // (higher than that will produce heavily saturated signals
-    //  i don't know if it's a bug from Linux mixer/Driver or anything)
-
-    // It looks like they (hopefully) fixed their shit so this nasty hack is no longer required.
-/*    #if defined(__LINUX__) && !defined(__FREEBSD__)
-        left_value = (int) (left_float * 8192.0f);
-        right_value = (int) (right_float * 8192.0f);
-    #else*/
-        left_value = (int) (left_float * 32767.0f);
-        right_value = (int) (right_float * 32767.0f);
-//    #endif
+    left_value = (int) (left_float * 32767.0f);
+    right_value = (int) (right_float * 32767.0f);
 }
 
 // ------------------------------------------------------
@@ -6704,7 +6687,7 @@ float do_eq(LPEQSTATE es, float sample, int Left)
 #if defined(PTK_SHUFFLE)
 void Update_Shuffle(void)
 {
-    if(shuffleswitch == 1) shufflestep = -((SamplesPerTick * shuffle) / 200);
-    else shufflestep = (SamplesPerTick * shuffle) / 200;
+    if(shuffleswitch == 1) shufflestep = -((SamplesPerTick * shuffle_amount) / 200);
+    else shufflestep = (SamplesPerTick * shuffle_amount) / 200;
 }
 #endif

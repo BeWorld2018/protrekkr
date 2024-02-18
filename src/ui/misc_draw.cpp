@@ -51,7 +51,9 @@ SDL_Surface *Temp_NOTESMALLPFONT;
 int Beveled = 1;
 char Use_Shadows = TRUE;
 
+#if defined(__MACOSX_PPC__)
 int max_colors_Pointer;
+#endif
 int curr_tab_highlight;
 
 int Nbr_Letters;
@@ -248,7 +250,9 @@ char *HexTab_NoZero[] =
 
 SDL_Color Ptk_Palette[256 * 2];
 SDL_Color Palette_303[256];
+#if defined(__MACOSX_PPC__)
 SDL_Color Palette_Pointer[256];
+#endif
 SDL_Color Palette_Logo[256];
 
 char *Labels_Palette[] =
@@ -1096,8 +1100,10 @@ SDL_Color Default_Palette9[] =
 
 LONGRGB Phony_Palette[sizeof(Default_Palette2) / sizeof(SDL_Color)];
 
+#if defined(__MACOSX_PPC__)
 SDL_Surface *POINTER;
 unsigned char *Pointer_BackBuf;
+#endif
 int bare_color_idx;
 
 // ------------------------------------------------------
@@ -2674,8 +2680,12 @@ void Set_Channel_State_Pic(int x, int color, int inv_color)
     int i;
     int j;
     unsigned char *Pix;
+    int was_locked = FALSE;
 
-    while(SDL_LockSurface(Temp_PFONT) < 0);
+    if(SDL_MUSTLOCK(Temp_PFONT))
+    {
+        if(!SDL_LockSurface(Temp_PFONT)) was_locked = TRUE;
+    }
 
     Pix = (unsigned char *) Temp_PFONT->pixels;
 
@@ -2696,7 +2706,10 @@ void Set_Channel_State_Pic(int x, int color, int inv_color)
         }
     }
 
-    SDL_UnlockSurface(Temp_PFONT);
+    if(was_locked)
+    {
+        SDL_UnlockSurface(Temp_PFONT);
+    }
 }
 
 // ------------------------------------------------------
@@ -2713,12 +2726,17 @@ void Create_Pattern_font(SDL_Surface *Dest, int offset,
     int Surface_offset_Dest;
     int i;
     int j;
+    int was_locked = FALSE;
 
     // Create the pattern font
     Copy_To_Surface(PFONT, Dest, 0, 0, 0, offset, 320, offset + 8);
 
     // Set the base colors
-    while(SDL_LockSurface(Dest) < 0);
+
+    if(SDL_MUSTLOCK(Dest))
+    {
+        if(!SDL_LockSurface(Dest)) was_locked = TRUE;
+    }
 
     Pix = (unsigned char *) Dest->pixels;
     Pix3 = Pix + (87 * Dest->pitch);
@@ -2763,13 +2781,21 @@ void Create_Pattern_font(SDL_Surface *Dest, int offset,
         }
     }
 
-    SDL_UnlockSurface(Dest);
+    if(was_locked)
+    {
+        SDL_UnlockSurface(Dest);
+    }
 
     // Blank line
     Copy_To_Surface(PFONT, Dest, 0, 16, 0, 7, 320, 7 + 1);
 
-    while(SDL_LockSurface(Dest) < 0);
+    was_locked = FALSE;
+    if(SDL_MUSTLOCK(Dest))
+    {
+        if(!SDL_LockSurface(Dest)) was_locked = TRUE;
+    }
 
+    Pix = (unsigned char *) Dest->pixels;
     Pix2 = Pix;
     Pix2 += (16 * Dest->pitch);
 
@@ -2882,7 +2908,10 @@ void Create_Pattern_font(SDL_Surface *Dest, int offset,
         }
     }
 
-    SDL_UnlockSurface(Dest);
+    if(was_locked)
+    {
+        SDL_UnlockSurface(Dest);
+    }
 
     // Markers arrows
     Copy_To_Surface(PFONT, Dest, 0, 64, 0, 8, 320, 8 + 7);
@@ -2909,14 +2938,32 @@ int Set_Pictures_Colors(void)
 {
     int i;
     unsigned char *Pix;
+    int was_locked;
 
     SDL_Palette *Pic_Palette;
     int min_idx = sizeof(Default_Palette2) / sizeof(SDL_Color);
+
+    was_locked = FALSE;
+    if(SDL_MUSTLOCK(FONT))
+    {
+        if(!SDL_LockSurface(FONT)) was_locked = TRUE;
+    }
 
     Pix = (unsigned char *) FONT->pixels;
     for(i = 0; i < FONT->w * FONT->h; i++)
     {
         if(Pix[i]) Pix[i] = COL_FONT_HI;
+    }
+
+    if(was_locked)
+    {
+        SDL_UnlockSurface(FONT);
+    }
+
+    was_locked = FALSE;
+    if(SDL_MUSTLOCK(FONT_LOW))
+    {
+        if(!SDL_LockSurface(FONT_LOW)) was_locked = TRUE;
     }
 
     Pix = (unsigned char *) FONT_LOW->pixels;
@@ -2925,7 +2972,18 @@ int Set_Pictures_Colors(void)
         if(Pix[i]) Pix[i] = COL_FONT_LO;
     }
    
+    if(was_locked)
+    {
+        SDL_UnlockSurface(FONT_LOW);
+    }
+
     bare_color_idx = min_idx;
+
+    was_locked = FALSE;
+    if(SDL_MUSTLOCK(SKIN303))
+    {
+        if(!SDL_LockSurface(SKIN303)) was_locked = TRUE;
+    }
 
     Pix = (unsigned char *) SKIN303->pixels;
     max_colors_303 = 0;
@@ -2936,6 +2994,17 @@ int Set_Pictures_Colors(void)
     }
     max_colors_303++;
 
+    if(was_locked)
+    {
+        SDL_UnlockSurface(SKIN303);
+    }
+
+    was_locked = FALSE;
+    if(SDL_MUSTLOCK(LOGOPIC))
+    {
+        if(!SDL_LockSurface(LOGOPIC)) was_locked = TRUE;
+    }
+
     Pix = (unsigned char *) LOGOPIC->pixels;
     max_colors_logo = 0;
     for(i = 0; i < LOGOPIC->w * LOGOPIC->h; i++)
@@ -2944,6 +3013,11 @@ int Set_Pictures_Colors(void)
         Pix[i] += min_idx;
     }
     max_colors_logo++;
+
+    if(was_locked)
+    {
+        SDL_UnlockSurface(LOGOPIC);
+    }
 
     Pic_Palette = SKIN303->format->palette;
     for(i = 0; i < max_colors_303; i++)
@@ -2954,6 +3028,7 @@ int Set_Pictures_Colors(void)
         Palette_303[i].unused = Pic_Palette->colors[i].unused;
     }
 
+#if defined(__MACOSX_PPC__)
     Pic_Palette = POINTER->format->palette;
     for(i = 0; i < max_colors_303; i++)
     {
@@ -2962,6 +3037,7 @@ int Set_Pictures_Colors(void)
         Palette_Pointer[i].b = Pic_Palette->colors[i].b;
         Palette_Pointer[i].unused = Pic_Palette->colors[i].unused;
     }
+#endif
     
     Pic_Palette = LOGOPIC->format->palette;
     for(i = 0; i < max_colors_logo; i++)
@@ -2972,6 +3048,7 @@ int Set_Pictures_Colors(void)
         Palette_Logo[i].unused = Pic_Palette->colors[i].unused;
     }
 
+#if defined(__MACOSX_PPC__)
     // Remap the colors of the pointer
     Pix = (unsigned char *) POINTER->pixels;
     max_colors_Pointer = 0;
@@ -2981,6 +3058,7 @@ int Set_Pictures_Colors(void)
         if(Pix[i]) Pix[i] += min_idx + max_colors_303;
     }
     max_colors_Pointer++;
+#endif
 
     Temp_PFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
     Temp_LARGEPFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
@@ -2989,8 +3067,10 @@ int Set_Pictures_Colors(void)
     Temp_NOTELARGEPFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
     Temp_NOTESMALLPFONT = SDL_AllocSurface(SDL_SWSURFACE, 320, 87 * 2, 8, 0, 0, 0, 0xff);
 
+#if defined(__MACOSX_PPC__)
     Pointer_BackBuf = (unsigned char *) malloc(POINTER->pitch * POINTER->h * sizeof(unsigned char));
     memset(Pointer_BackBuf, 0, POINTER->pitch * POINTER->h * sizeof(unsigned char));
+#endif
 
     Set_Logo_Palette();
     Get_Phony_Palette();
@@ -3038,6 +3118,7 @@ Wait_Palette:
         Ptk_Palette[i + bare_color_idx].unused = Palette_303[i].unused;
     }
 
+#if defined(__MACOSX_PPC__)
     for(i = 0; i < max_colors_Pointer; i++)
     {
         Ptk_Palette[i + bare_color_idx + max_colors_303].r = Palette_Pointer[i].r;
@@ -3045,6 +3126,7 @@ Wait_Palette:
         Ptk_Palette[i + bare_color_idx + max_colors_303].b = Palette_Pointer[i].b;
         Ptk_Palette[i + bare_color_idx + max_colors_303].unused = Palette_Pointer[i].unused;
     }
+#endif
 }
 
 void Set_Logo_Palette(void)
@@ -3078,7 +3160,9 @@ void Init_UI(void)
 // Free the allocated resources
 void Destroy_UI(void)
 {
+#if defined(__MACOSX_PPC__)
    if(Pointer_BackBuf) free(Pointer_BackBuf);
+#endif
 }
 
 // ------------------------------------------------------

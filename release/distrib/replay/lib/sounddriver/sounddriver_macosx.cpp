@@ -45,10 +45,13 @@ AudioDeviceID AUDIO_Device;
 UInt32 Amount;
 AudioStreamBasicDescription	Desc;
 
+#if defined(__MACOSX_X86__)
+AudioDeviceIOProcID ProcID;
+#endif
+
 int AUDIO_SoundBuffer_Size;
 int AUDIO_Latency;
 int AUDIO_Milliseconds = 10;
-int AUDIO_16Bits;
 
 // ------------------------------------------------------
 // Functions
@@ -62,9 +65,9 @@ void AUDIO_Synth_Play(void);
 // Name: AUDIO_Thread()
 // Desc: Audio rendering
 static OSStatus AUDIO_Callback(AudioDeviceID device,
-                               const AudioTimeStamp* current_time,
-	                           const AudioBufferList* data_in,
-                               const AudioTimeStamp* time_in,
+                               const AudioTimeStamp *current_time,
+	                           const AudioBufferList *data_in,
+                               const AudioTimeStamp *time_in,
 	                           AudioBufferList *data_out,
                                const AudioTimeStamp *time_out,
                                void *client_data)
@@ -100,6 +103,24 @@ int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
                                 &Amount,
                                 (void *) &AUDIO_Device) == noErr)
     {
+
+#if defined(__MACOSX_X86__)
+        if(AudioDeviceCreateIOProcID(AUDIO_Device,
+                                      AUDIO_Callback,
+                                      NULL,
+                                      &ProcID) == noErr)
+        {
+            return(AUDIO_Create_Sound_Buffer(AUDIO_Milliseconds));
+        }
+
+#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
+        else
+        {
+            Message_Error("Error while calling AudioDeviceCreateIOProcID()");
+        }
+#endif
+
+#else
         if(AudioDeviceAddIOProc(AUDIO_Device,
                                 AUDIO_Callback,
                                 NULL) == noErr)
@@ -112,6 +133,8 @@ int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
         {
             Message_Error("Error while calling AudioDeviceAddIOProc()");
         }
+#endif
+
 #endif
 
     }
@@ -143,63 +166,32 @@ int AUDIO_Create_Sound_Buffer(int milliseconds)
 
     AudioValueRange Frame_Range;
 
-    AUDIO_16Bits = TRUE;
-
     Amount = sizeof(AudioStreamBasicDescription);
     if(AudioDeviceGetProperty(AUDIO_Device,
                               0,
                               FALSE,
-                              kAudioDevicePropertyStreamFormat,
-                              &Amount,
-                              &Desc) == noErr)
+                              kAudioDevicePropertyStreamFormat, &Amount, &Desc) == noErr)
     {
         Desc.mSampleRate = AUDIO_PCM_FREQ;
         Desc.mChannelsPerFrame = AUDIO_DBUF_CHANNELS;
-        Desc.mBitsPerChannel = sizeof(short) << 3;
-        Desc.mFormatFlags = kLinearPCMFormatFlagIsPacked | kAudioFormatFlagIsSignedInteger;
+        Desc.mBitsPerChannel = sizeof(float) << 3;
+        Desc.mFormatFlags = kLinearPCMFormatFlagIsPacked | kAudioFormatFlagIsFloat;
         Desc.mFormatID = kAudioFormatLinearPCM;
         Desc.mFramesPerPacket = 1;
         Desc.mBytesPerFrame = (Desc.mBitsPerChannel * Desc.mChannelsPerFrame) >> 3;
         Desc.mBytesPerPacket = Desc.mBytesPerFrame * Desc.mFramesPerPacket;
 
 #if defined(__BIG_ENDIAN__)
-        Desc.mFormatFlags |= kLinearPCMFormatFlagIsBigEndian;
+            Desc.mFormatFlags |= kLinearPCMFormatFlagIsBigEndian;
 #endif
 
-        // Try with 16 bit integers
         if(AudioDeviceSetProperty(AUDIO_Device,
                                   NULL,
                                   0,
                                   FALSE,
-                                  kAudioDevicePropertyStreamFormat,
-                                  sizeof(AudioStreamBasicDescription),
-                                  &Desc) != noErr)
+                                  kAudioDevicePropertyStreamFormat, sizeof(AudioStreamBasicDescription), &Desc) != noErr)
         {
-            // Try with 32 bit floating points
-            AUDIO_16Bits = FALSE;
-            Desc.mSampleRate = AUDIO_PCM_FREQ;
-            Desc.mChannelsPerFrame = AUDIO_DBUF_CHANNELS;
-            Desc.mBitsPerChannel = sizeof(float) << 3;
-            Desc.mFormatFlags = kLinearPCMFormatFlagIsPacked | kAudioFormatFlagIsFloat;
-            Desc.mFormatID = kAudioFormatLinearPCM;
-            Desc.mFramesPerPacket = 1;
-            Desc.mBytesPerFrame = (Desc.mBitsPerChannel * Desc.mChannelsPerFrame) >> 3;
-            Desc.mBytesPerPacket = Desc.mBytesPerFrame * Desc.mFramesPerPacket;
-
-#if defined(__BIG_ENDIAN__)
-            Desc.mFormatFlags |= kLinearPCMFormatFlagIsBigEndian;
-#endif
-
-            if(AudioDeviceSetProperty(AUDIO_Device,
-                                      NULL,
-                                      0,
-                                      FALSE,
-                                      kAudioDevicePropertyStreamFormat,
-                                      sizeof(AudioStreamBasicDescription),
-                                      &Desc) != noErr)
-            {
-                found_pcmformat = FALSE;
-            }
+            found_pcmformat = FALSE;
         }
 
         if(found_pcmformat)
@@ -231,7 +223,13 @@ int AUDIO_Create_Sound_Buffer(int milliseconds)
                                       sizeof(AUDIO_SoundBuffer_Size),
                                       &AUDIO_SoundBuffer_Size) == noErr)
             {
+
+#if defined(__MACOSX_X86__)
+                AudioDeviceStart(AUDIO_Device, ProcID);
+#else
                 AudioDeviceStart(AUDIO_Device, AUDIO_Callback);
+#endif
+
                 return(TRUE);
             }
 
@@ -329,7 +327,13 @@ void AUDIO_Stop(void)
 void AUDIO_Stop_Sound_Buffer(void)
 {
     AUDIO_Stop();
+
+#if defined(__MACOSX_X86__)
+    AudioDeviceStop(AUDIO_Device, ProcID);
+#else
     AudioDeviceStop(AUDIO_Device, AUDIO_Callback);
+#endif
+
 }
 
 // ------------------------------------------------------
@@ -339,5 +343,5 @@ void AUDIO_Stop_Driver(void)
 {
     AUDIO_Stop_Sound_Buffer();
     AudioDeviceRemoveIOProc(AUDIO_Device, AUDIO_Callback);
-    AUDIO_Device = 0;
+    AUDIO_Device = NULL;
 }

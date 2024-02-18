@@ -148,8 +148,8 @@ void Save_Config(void)
         Write_Data_Swap(&Cur_Width, sizeof(int), 1, out);
         Write_Data_Swap(&Cur_Height, sizeof(int), 1, out);
 
-        Cur_Left = -1;
-        Cur_Top = -1;
+        if(Cur_Left < 0) Cur_Left = 0;
+        if(Cur_Top < 0) Cur_Top = 0;
         Write_Data_Swap(&Cur_Left, sizeof(int), 1, out);
         Write_Data_Swap(&Cur_Top, sizeof(int), 1, out);
 
@@ -267,7 +267,7 @@ void Load_Config(void)
                 curr_tab_highlight = USER_SCREEN_DISKIO_EDIT;
             }
 
-            // Reload the compelte midi automation config
+            // Reload the complete midi automation config
             Load_Midi_Cfg_Data(Read_Data, Read_Data_Swap, in);
 
             Read_Data_Swap(&Cur_Width, sizeof(int), 1, in);
@@ -275,30 +275,6 @@ void Load_Config(void)
 
             Read_Data_Swap(&Cur_Left, sizeof(int), 1, in);
             Read_Data_Swap(&Cur_Top, sizeof(int), 1, in);
-            Desktop = SDL_SetVideoMode(0, 0, 0, 0);
-            if(Desktop)
-            {
-                // Check if the coords are too big
-                if(Cur_Width > SDL_GetVideoSurface()->w)
-                {
-                    Cur_Left = 0;
-                    Cur_Width = SDL_GetVideoSurface()->w;
-                }
-                if(Cur_Height > SDL_GetVideoSurface()->h)
-                {
-                    Cur_Top = 0;
-                    Cur_Height = SDL_GetVideoSurface()->h;
-                }
-                if(Cur_Left == -1 ||
-                   Cur_Top == -1)
-                {
-                    Cur_Left = SDL_GetVideoSurface()->w;
-                    Cur_Top = SDL_GetVideoSurface()->h;
-                    Cur_Left = (Cur_Left - Cur_Width) / 2;
-                    Cur_Top = (Cur_Top - Cur_Height) / 2;
-                }
-                SDL_FreeSurface(Desktop);
-            }
 
 #ifndef __MORPHOS__
             sprintf(Win_Coords,

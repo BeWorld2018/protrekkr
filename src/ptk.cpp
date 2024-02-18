@@ -37,7 +37,7 @@
 // Constants
 // This is a nasty hack: we should have a specific ASCII buffer
 // instead of using the unicode one.
-#if !defined(__MACOSX__)
+#if !defined(__MACOSX_PPC__)
 #define UNICODE_OFFSET1 0x20
 #define UNICODE_OFFSET2 0x60
 #else
@@ -47,7 +47,7 @@
 
 // ------------------------------------------------------
 // Variables
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__)
 SystemSoundActionID WavActionID;
 #endif
 
@@ -79,7 +79,9 @@ extern int pos_scope_latency;
 
 extern float sp_Tvol_Mod[MAX_TRACKS];
 
+#if defined(__MACOSX_PPC__)
 int Display_Pointer = FALSE;
+#endif
 
 int CONSOLE_WIDTH;
 int CHANNELS_WIDTH;
@@ -107,7 +109,6 @@ int multifactor = 4;
 char seditor = 0;
 int Done_Tip = FALSE;
 char tipoftheday[256];
-int ctipoftheday = 0;
 char Current_Instrument_Split = 0;
 
 int player_pos = -1;
@@ -486,15 +487,9 @@ int Load_Font_Datas(char *name)
 // Load the necessary datas and initialize the interface
 int Init_Context(void)
 {
-#if defined(__WIN32__)
-    srand(GetTickCount());
-#else
-    srand(rand());
-#endif
+    srand(time(0));
 
-    ctipoftheday = rand() % 12;
-
-    switch(ctipoftheday)
+    switch(rand() % 13)
     {
         case 0: sprintf(tipoftheday, "Tip Of The Hour: Pressing CTRL+I will interpolate effect value on a marked block."); break;
         case 1: sprintf(tipoftheday, "Tip Of The Hour: The right mouse button will have a secondary action on most buttons."); break;
@@ -507,9 +502,8 @@ int Init_Context(void)
         case 8: sprintf(tipoftheday, "Tip Of The Hour: Pattern command '16xx' will reset the Filter LFO of the track. No parameter required."); break;
         case 9: sprintf(tipoftheday, "Tip Of The Hour: Use '90' command in the panning column to change midi controllers values."); break;
         case 10: sprintf(tipoftheday, "Tip Of The Hour: Increase latency time if sound is distorted."); break;
-        case 11: sprintf(tipoftheday, "Tip Of The Hour: Pressing right mouse button on most arrows buttons (\03\04) will speed operation up.");
-
-        default: sprintf(tipoftheday, "Tip Of The Hour: See readme.txt for more infos about help and pattern commands."); break;
+        case 11: sprintf(tipoftheday, "Tip Of The Hour: Pressing right mouse button on most arrows buttons (\03\04) will speed operation up."); break;
+        default: sprintf(tipoftheday, "Tip Of The Hour: See manual.pdf for more infos about help and pattern commands."); break;
     }
 
     L_MaxLevel = 0;
@@ -553,6 +547,32 @@ int Init_Context(void)
         return(FALSE);
     }
 
+    LOGOPIC = Load_Skin_Picture("neural.bmp");
+    if(!LOGOPIC) return(FALSE);
+#if defined(__MACOSX_PPC__)
+    POINTER = Load_Skin_Picture("pointer.bmp");
+    if(!POINTER) return(FALSE);
+#endif
+    SKIN303 = Load_Skin_Picture("303.bmp");
+    if(!SKIN303) return(FALSE);
+    PFONT = Load_Skin_Picture("pattern_font.bmp");
+    if(!PFONT) return(FALSE);
+    FONT = Load_Skin_Picture("font.bmp");
+    if(!FONT) return(FALSE);
+    FONT_LOW = Load_Skin_Picture("font.bmp");
+    if(!FONT_LOW) return(FALSE);
+
+    if(!Set_Pictures_Colors()) return(FALSE);
+
+    if(!Load_Font_Datas("font_datas.txt")) return(FALSE);
+
+    SDL_SetColorKey(FONT, SDL_SRCCOLORKEY, 0);
+    SDL_SetColorKey(FONT_LOW, SDL_SRCCOLORKEY, 0);
+
+#if defined(__MACOSX_PPC__)
+    SDL_SetColorKey(POINTER, SDL_SRCCOLORKEY, 0);
+#endif
+
     // Player initialization
 #if defined(__WIN32__)
     if(!Ptk_InitDriver(Main_Window, AUDIO_Milliseconds))
@@ -571,29 +591,7 @@ int Init_Context(void)
 
     // Old preset by default
     Load_Old_Reverb_Presets(0);
-
     Initreverb();
-
-    LOGOPIC = Load_Skin_Picture("neural.bmp");
-    if(!LOGOPIC) return(FALSE);
-    POINTER = Load_Skin_Picture("pointer.bmp");
-    if(!POINTER) return(FALSE);
-    SKIN303 = Load_Skin_Picture("303.bmp");
-    if(!SKIN303) return(FALSE);
-    PFONT = Load_Skin_Picture("pattern_font.bmp");
-    if(!PFONT) return(FALSE);
-    FONT = Load_Skin_Picture("font.bmp");
-    if(!FONT) return(FALSE);
-    FONT_LOW = Load_Skin_Picture("font.bmp");
-    if(!FONT_LOW) return(FALSE);
-
-    if(!Set_Pictures_Colors()) return(FALSE);
-
-    if(!Load_Font_Datas("font_datas.txt")) return(FALSE);
-
-    SDL_SetColorKey(FONT, SDL_SRCCOLORKEY, 0);
-    SDL_SetColorKey(FONT_LOW, SDL_SRCCOLORKEY, 0);
-    SDL_SetColorKey(POINTER, SDL_SRCCOLORKEY, 0);
 
     Timer = SDL_AddTimer(1000, Timer_Ptr, NULL);
 
@@ -632,7 +630,7 @@ void Destroy_Context(void)
 
 // ------------------------------------------------------
 // Strictly for Mac OS X
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__)
 OSStatus CompletionRoutine(SystemSoundActionID inAction, void *UserDat)
 {
     SystemSoundRemoveActionID(inAction);
@@ -647,7 +645,7 @@ int Screen_Update(void)
     int FineTune_Value;
     int i;
 
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__)
     FSRef soundFileRef;
 #endif
 
@@ -791,7 +789,7 @@ int Screen_Update(void)
 #if defined(__WIN32__)
                         PlaySound(Get_FileName(lt_curr[Scopish]), NULL, SND_FILENAME | SND_ASYNC);
 #endif
-#if defined(__MACOSX__)
+#if defined(__MACOSX_PPC__)
                         if(FSPathMakeRef((Uint8 *) Get_FileName(lt_curr[Scopish]), &soundFileRef, NULL) == noErr)
                         {
                             SystemSoundGetActionID(&soundFileRef, &WavActionID);
@@ -1733,10 +1731,12 @@ int Screen_Update(void)
             Actualize_Sample_Ed(teac);
         }
 
+#if defined(__MACOSX_PPC__)
         if(gui_action == GUI_CMD_REFRESH_PALETTE)
         {
             Display_Pointer = TRUE;
         }
+#endif
 
         if(gui_action == GUI_CMD_EXIT)
         {
@@ -6351,12 +6351,12 @@ void Display_Shuffle(void)
 {
     char string[64];
 
-    if(shuffle > 100) shuffle = 100;
-    if(shuffle < 0) shuffle = 0;
+    if(shuffle_amount > 100) shuffle_amount = 100;
+    if(shuffle_amount < 0) shuffle_amount = 0;
     Gui_Draw_Button_Box(586, 6, 40, 16, "Shuffle", BUTTON_NORMAL | BUTTON_DISABLED | BUTTON_TEXT_CENTERED);
 
-    Realslider_Size(586 + 40, 6, 100, shuffle, TRUE);
-    sprintf(string, "%d%%", shuffle);
+    Realslider_Size(586 + 40, 6, 100, shuffle_amount, TRUE);
+    sprintf(string, "%d%%", shuffle_amount);
     Print_String(string, 586 + 40, 8, 116, BUTTON_TEXT_CENTERED);
     Gui_Draw_Button_Box(746, 6, Cur_Width - 802, 16, "", BUTTON_NORMAL | BUTTON_DISABLED);
 }
@@ -6390,7 +6390,7 @@ void Mouse_Sliders_Master_Shuffle(void)
     // Shuffle
     if(zcheckMouse(586 + 40, 6, 120, 18))
     {
-        shuffle = (int) ((Mouse.x - (586 + 40 + 10)));
+        shuffle_amount = (int) ((Mouse.x - (586 + 40 + 10)));
         Display_Shuffle();
     }
 }
@@ -6816,19 +6816,19 @@ int Init_Scopes_Buffers(void)
     for(i = 0; i < MAX_TRACKS; i++)
     {  
         if(Scope_Dats[i]) free(Scope_Dats[i]);
-        Scope_Dats[i] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2);
+        Scope_Dats[i] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
         if(!Scope_Dats[i]) return(FALSE);
-        memset(Scope_Dats[i], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2);
+        memset(Scope_Dats[i], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
     }
 
     if(Scope_Dats_LeftRight[0]) free(Scope_Dats_LeftRight[0]);
     if(Scope_Dats_LeftRight[1]) free(Scope_Dats_LeftRight[1]);
-    Scope_Dats_LeftRight[0] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2);
+    Scope_Dats_LeftRight[0] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
     if(!Scope_Dats_LeftRight[0]) return(FALSE);
-    Scope_Dats_LeftRight[1] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2);
+    Scope_Dats_LeftRight[1] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
     if(!Scope_Dats_LeftRight[1]) return(FALSE);
-    memset(Scope_Dats_LeftRight[0], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2);
-    memset(Scope_Dats_LeftRight[1], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2);
+    memset(Scope_Dats_LeftRight[0], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
+    memset(Scope_Dats_LeftRight[1], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
     return(TRUE);
 }
 
