@@ -155,18 +155,18 @@ int AUDIO_Create_Sound_Buffer(int milliseconds)
     int buf_size = AUDIO_SoundBuffer_Size;
     ptrAudio_BufferPlay1 = (short *) (((int) AUDIO_malloc_64(&buf_size)));
     sceKernelDcacheWritebackInvalidateAll();
-    memset((void *) ptrAudio_BufferPlay1, 0, buf_size);
 
     if((int) ptrAudio_BufferPlay1)
     {
+        memset((void *) ptrAudio_BufferPlay1, 0, buf_size);
         buf_size = AUDIO_SoundBuffer_Size;
         ptrAudio_BufferPlay2 = (short *) (((int) AUDIO_malloc_64(&buf_size)));
         sceKernelDcacheWritebackInvalidateAll();
-        memset((void *) ptrAudio_BufferPlay2, 0, buf_size);
 
         if((int) ptrAudio_BufferPlay2)
         {
-            AUDIO_thid = sceKernelCreateThread("Ptk", AUDIO_Thread, AUDIO_THREAD_PRIORITY, AUDIO_THREAD_STACKSIZE, 0, NULL);
+            memset((void *) ptrAudio_BufferPlay2, 0, buf_size);
+            AUDIO_thid = sceKernelCreateThread("Ptk", AUDIO_Thread, AUDIO_THREAD_PRIORITY, AUDIO_THREAD_STACKSIZE, PSP_THREAD_ATTR_VFPU, NULL);
             if(AUDIO_thid > 0)
             {
                 sceKernelStartThread(AUDIO_thid, 0, NULL);

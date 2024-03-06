@@ -75,13 +75,13 @@ void Actualize_Track_Ed(char gode)
     {
         if(gode == 0 || gode == 15)
         {
-            if(Track_Under_Caret > MAX_TRACKS - 1)
+            if(Track_Under_Caret > Songtracks - 1)
             {
                 Track_Under_Caret = 0;
             }
             if(Track_Under_Caret < 0)
             {
-                Track_Under_Caret = MAX_TRACKS - 1;
+                Track_Under_Caret = Songtracks - 1;
             }
             value_box(508, (Cur_Height - 114), Track_Under_Caret, BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
 
@@ -100,7 +100,6 @@ void Actualize_Track_Ed(char gode)
             }
             Realslider(77, (Cur_Height - 116), (int) TCut[Track_Under_Caret], FType[Track_Under_Caret] != 4);
         }
-//            Realslider(77, (Cur_Height - 116), (int) TCut[Track_Under_Caret], FALSE);
 
         if(gode == 0 || gode == 2 || gode == 15)
         {

@@ -31,7 +31,7 @@
 
 // ------------------------------------------------------
 // Includes
-#include "include/sounddriver_freebsd.h"
+#include "include/sounddriver_psvita.h"
 
 // ------------------------------------------------------
 // Variables
@@ -40,17 +40,11 @@ int AUDIO_Samples;
 int AUDIO_Play_Flag;
 float AUDIO_Timer;
 
-int volatile AUDIO_Acknowledge;
-int AUDIO_Device;
-short *AUDIO_SoundBuffer[2];
-audio_buf_info AUDIO_Info_Buffer;
-pthread_t hThread;
-int volatile Thread_Running;
+SceUID AUDIO_thid;
+int AUDIO_HWChannel;
 int AUDIO_SoundBuffer_Size;
-
 int AUDIO_Latency;
 int AUDIO_Milliseconds = 10;
-int AUDIO_FlipFlop = 0;
 
 // ------------------------------------------------------
 // Functions
@@ -63,37 +57,40 @@ void AUDIO_Synth_Play(void);
 // ------------------------------------------------------
 // Name: AUDIO_Thread()
 // Desc: Audio rendering
-void *AUDIO_Thread(void *arg)
+short *AUDIO_SoundBuffer[2];
+int AUDIO_FlipFlop = 0;
+
+SceInt32 AUDIO_Thread(SceSize args, ScePVoid argp)
 {
-    while(Thread_Running)
+	int volumes[2] = { SCE_AUDIO_VOLUME_0DB, SCE_AUDIO_VOLUME_0DB };
+
+    for(;;)
     {
         if(AUDIO_SoundBuffer[0])
         {
-            AUDIO_Acknowledge = FALSE;
             if(AUDIO_Play_Flag)
             {
                 AUDIO_Mixer((Uint8 *) AUDIO_SoundBuffer[AUDIO_FlipFlop], AUDIO_SoundBuffer_Size);
             }
             else
             {
-                unsigned int i;
+                int i;
+
                 char *pSamples = (char *) AUDIO_SoundBuffer[AUDIO_FlipFlop];
                 for(i = 0; i < AUDIO_SoundBuffer_Size; i++)
                 {
                     pSamples[i] = 0;
                 }
-                AUDIO_Acknowledge = TRUE;
             }
-            write(AUDIO_Device, AUDIO_SoundBuffer[AUDIO_FlipFlop], AUDIO_SoundBuffer_Size);
+            sceAudioOutOutput(AUDIO_HWChannel, (void *) AUDIO_SoundBuffer[AUDIO_FlipFlop]);
+            sceAudioOutSetVolume(AUDIO_HWChannel, (SceAudioOutChannelFlag) (SCE_AUDIO_VOLUME_FLAG_L_CH | SCE_AUDIO_VOLUME_FLAG_R_CH), volumes);
             AUDIO_FlipFlop ^= 1;
 
             AUDIO_Samples += AUDIO_SoundBuffer_Size;
             AUDIO_Timer = ((((float) AUDIO_Samples) * (1.0f / (float) AUDIO_Latency)) * 1000.0f);
         }
-        usleep(10);
+        sceKernelDelayThread(10);
     }
-    Thread_Running = 1; 
-    pthread_exit(0);
     return(0);
 }
 
@@ -103,27 +100,37 @@ void *AUDIO_Thread(void *arg)
 int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
 {
     AUDIO_Mixer = Mixer;
+    return(AUDIO_Create_Sound_Buffer(AUDIO_Milliseconds));
+}
 
-    char *Mixer_Name;
-    int8 Mixer_Volume[4];
-    struct sched_param p;
+// ------------------------------------------------------
+// Name: PSVITA_malloc()
+// Desc: Allocate a memory block
+#define ALIGN(x, a)	(((x) + ((a) - 1)) & ~((a) - 1))
+void *PSVITA_malloc(int size)
+{
+    SceUID ret;
+    int *mem_block;
 
-    AUDIO_Device = open("/dev/dsp", O_WRONLY, 0);
-    if(AUDIO_Device >= 0)
+    size = ALIGN(size + 4, 4096);
+	ret = sceKernelAllocMemBlock("", SCE_KERNEL_MEMBLOCK_TYPE_USER_MAIN_NC_RW, size, 0);
+    if(ret < 0) return(NULL);
+    sceKernelGetMemBlockBase(ret, (void **) &mem_block);
+    memset((void *) mem_block, 0, size);
+    mem_block[0] = ret;
+    return((void *) &mem_block[1]);
+}
+
+// ------------------------------------------------------
+// Name: PSVITA_free()
+// Desc: Free a memory block
+void PSVITA_free(void *mem_block)
+{
+    int *block = (int *) mem_block;
+    if(block)
     {
-        p.sched_priority = 1;
-        pthread_setschedparam(pthread_self(), SCHED_FIFO, &p);
-        return(AUDIO_Create_Sound_Buffer(AUDIO_Milliseconds));
+        sceKernelFreeMemBlock(block[-1]);
     }
-    
-#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
-    else
-    {
-        Message_Error("Error while calling open(\"/dev/dsp\")");
-    }
-#endif
-
-    return(FALSE);
 }
 
 // ------------------------------------------------------
@@ -131,99 +138,37 @@ int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
 // Desc: Create an audio buffer of given milliseconds
 int AUDIO_Create_Sound_Buffer(int milliseconds)
 {
-    int num_fragments;
     int frag_size;
+	int volumes[2] = { 0, 0 };
 
     if(milliseconds < 10) milliseconds = 10;
     if(milliseconds > 250) milliseconds = 250;
 
-    num_fragments = 6;
     frag_size = (int) (AUDIO_PCM_FREQ * (milliseconds / 1000.0f));
 
-    int Dsp_Val;
+    AUDIO_SoundBuffer_Size = frag_size * ((AUDIO_DBUF_RESOLUTION * AUDIO_DBUF_CHANNELS) >> 3);
+    AUDIO_SoundBuffer_Size = AUDIO_SAMPLE_ALIGN(AUDIO_SoundBuffer_Size);
 
-	frag_size = 10 + (int) (logf((float) (frag_size >> 9)) / logf(2.0f));
+    AUDIO_HWChannel = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_BGM, AUDIO_SoundBuffer_Size, AUDIO_PCM_FREQ, SCE_AUDIO_OUT_MODE_STEREO);
+    sceAudioOutSetVolume(AUDIO_HWChannel, (SceAudioOutChannelFlag) (SCE_AUDIO_VOLUME_FLAG_L_CH | SCE_AUDIO_VOLUME_FLAG_R_CH), volumes);
+    AUDIO_SoundBuffer_Size <<= 2;
 
-    Dsp_Val = (num_fragments << 16) | frag_size;
-    ioctl(AUDIO_Device, SNDCTL_DSP_SETFRAGMENT, &Dsp_Val);
-    Dsp_Val = AUDIO_DBUF_CHANNELS;
-    ioctl(AUDIO_Device, SNDCTL_DSP_CHANNELS, &Dsp_Val);
-    Dsp_Val = AFMT_S16_NE;
-    ioctl(AUDIO_Device, SNDCTL_DSP_SETFMT, &Dsp_Val);
-    Dsp_Val = AUDIO_PCM_FREQ;
-    ioctl(AUDIO_Device, SNDCTL_DSP_SPEED, &Dsp_Val);
-
-    if((ioctl(AUDIO_Device, SNDCTL_DSP_GETOSPACE, &AUDIO_Info_Buffer) < 0))
-    {
-        ioctl(AUDIO_Device, SNDCTL_DSP_GETBLKSIZE, &AUDIO_Info_Buffer.fragsize);
-    }
-
-    AUDIO_SoundBuffer_Size = AUDIO_Info_Buffer.fragsize;
     AUDIO_Latency = AUDIO_SoundBuffer_Size;
-
-    AUDIO_SoundBuffer[0] = (short *) malloc(AUDIO_SoundBuffer_Size << 1);
-    if(!AUDIO_SoundBuffer[0])
+	AUDIO_SoundBuffer[0] = (short *) PSVITA_malloc(AUDIO_SoundBuffer_Size);
+    if(AUDIO_SoundBuffer[0])
     {
-
-#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
-        Message_Error("Can't allocate audio buffer 1");
-#endif
-
-        return(FALSE);
+        AUDIO_SoundBuffer[1] = (short *) PSVITA_malloc(AUDIO_SoundBuffer_Size);
+        if(AUDIO_SoundBuffer[1])
+        {
+            AUDIO_thid = sceKernelCreateThread("Ptk", AUDIO_Thread, AUDIO_THREAD_PRIORITY, AUDIO_THREAD_STACKSIZE, 0, SCE_KERNEL_CPU_MASK_USER_ALL, NULL);
+            if(AUDIO_thid >= 0)
+            {
+                sceKernelStartThread(AUDIO_thid, 0, NULL);
+                return(TRUE);
+            }
+        }
     }
-    AUDIO_SoundBuffer[1] = (short *) malloc(AUDIO_SoundBuffer_Size << 1);
-    if(!AUDIO_SoundBuffer[1])
-    {
-
-#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
-        Message_Error("Can't allocate audio buffer 2");
-#endif
-
-        return(FALSE);
-    }
-    memset(AUDIO_SoundBuffer[0], 0, AUDIO_SoundBuffer_Size << 1);
-    memset(AUDIO_SoundBuffer[1], 0, AUDIO_SoundBuffer_Size << 1);
-
-    Thread_Running = 1;
-    if(pthread_create(&hThread, NULL, AUDIO_Thread, NULL) == 0)
-    {
-        return(TRUE);
-    }
-
-#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
-    Message_Error("Error while calling pthread_create()");
-#endif
-
-    Thread_Running = 0;
-
     return(FALSE);
-}
-
-// ------------------------------------------------------
-// Name: AUDIO_Wait_For_Thread()
-// Desc: Wait for a command acknowledgment from the thread
-void AUDIO_Wait_For_Thread(void)
-{
-    if(Thread_Running)
-    {
-        if(AUDIO_Play_Flag)
-        {
-            while(AUDIO_Acknowledge)
-            {
-                usleep(10);
-            }
-        }
-        else
-        {
-            if(hThread)
-            {
-                while(!AUDIO_Acknowledge)
-                {
-                    usleep(10);
-                }
-            }
-        }
-    }
 }
 
 // ------------------------------------------------------
@@ -233,7 +178,6 @@ void AUDIO_Play(void)
 {
     AUDIO_ResetTimer();
     AUDIO_Play_Flag = TRUE;
-    AUDIO_Wait_For_Thread();
 }
 
 // ------------------------------------------------------
@@ -275,7 +219,6 @@ int AUDIO_GetSamples(void)
 void AUDIO_Stop(void)
 {
     AUDIO_Play_Flag = FALSE;
-    AUDIO_Wait_For_Thread();
 }
 
 // ------------------------------------------------------
@@ -284,20 +227,12 @@ void AUDIO_Stop(void)
 void AUDIO_Stop_Sound_Buffer(void)
 {
     AUDIO_Stop();
-
-    if(hThread)
-    {
-        Thread_Running = 0;
-        while(!Thread_Running)
-        {
-            usleep(10);
-        }
-        hThread = 0;
-    }
-    if(AUDIO_SoundBuffer[0]) free(AUDIO_SoundBuffer[0]);
-    AUDIO_SoundBuffer[0] = NULL;
-    if(AUDIO_SoundBuffer[1]) free(AUDIO_SoundBuffer[1]);
-    AUDIO_SoundBuffer[1] = NULL;
+    if(AUDIO_thid > 0) sceKernelDeleteThread(AUDIO_thid);
+    AUDIO_thid = NULL;
+    if(AUDIO_HWChannel) sceAudioOutReleasePort(AUDIO_HWChannel);
+    AUDIO_HWChannel = NULL;
+    if(AUDIO_SoundBuffer[0]) PSVITA_free((void *) AUDIO_SoundBuffer[0]);
+    if(AUDIO_SoundBuffer[1]) PSVITA_free((void *) AUDIO_SoundBuffer[1]);
 }
 
 // ------------------------------------------------------
@@ -306,6 +241,4 @@ void AUDIO_Stop_Sound_Buffer(void)
 void AUDIO_Stop_Driver(void)
 {
     AUDIO_Stop_Sound_Buffer();
-    if(AUDIO_Device) close(AUDIO_Device);
-    AUDIO_Device = 0;
 }

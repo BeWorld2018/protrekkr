@@ -601,6 +601,7 @@ int pl_sample[MAX_POLYPHONY];
 int pl_vol_row;
 int pl_pan_row;
 unsigned char *RawPatterns;
+
 int pl_eff_row[MAX_FX];
 int pl_dat_row[MAX_FX];
 int glide;
@@ -861,7 +862,6 @@ int delay_time;
     char nameins[128][20];
     char SampleName[128][16][64];
     unsigned char nPatterns = 1;
-    void Actualize_303_Ed(char gode);
     extern char sr_isrecording;
     extern int32 sed_range_start;
     extern int32 sed_range_end;
@@ -929,7 +929,7 @@ float filterhp2(int stereo, int ch, float input, float f, float q);
     void Go303(void);
 #endif
 
-float Kutoff(int v);
+float Cutoff(int v);
 float Resonance(float v);
 float Bandwidth(int v);
 void Reverb_work(void);
@@ -1234,18 +1234,35 @@ short *Unpack_Sample(int Dest_Length, char Pack_Type, int BitRate)
     if(Packed_Length == -1)
     {
         // Sample wasn't packed
+
+#if defined(__PSVITA__)
+        Packed_Read_Buffer = (Uint8 *) PSVITA_malloc(Dest_Length * 2 + 8);
+#else
         Packed_Read_Buffer = (Uint8 *) malloc(Dest_Length * 2 + 8);
         memset(Packed_Read_Buffer, 0, Dest_Length * 2 + 8);
+#endif
+
         Mod_Dat_Read(Packed_Read_Buffer, sizeof(char) * (Dest_Length * 2));
         return((short *) Packed_Read_Buffer);
     }
     else
     {
+
+#if defined(__PSVITA__)
+        Packed_Read_Buffer = (Uint8 *) PSVITA_malloc(Packed_Length);
+#else
         Packed_Read_Buffer = (Uint8 *) malloc(Packed_Length);
+#endif
+
         // Read the packer buffer
         Mod_Dat_Read(Packed_Read_Buffer, sizeof(char) * Packed_Length);
+
+#if defined(__PSVITA__)
+        Dest_Buffer = (short *) PSVITA_malloc(Dest_Length * 2 + 8);
+#else
         Dest_Buffer = (short *) malloc(Dest_Length * 2 + 8);
         memset(Dest_Buffer, 0, Dest_Length * 2 + 8);
+#endif
 
 #if defined(PTK_AT3) || defined(PTK_GSM) || defined(PTK_MP3) || \
     defined(PTK_ADPCM) || defined(PTK_8BIT) || \
@@ -1295,7 +1312,12 @@ short *Unpack_Sample(int Dest_Length, char Pack_Type, int BitRate)
         }
 #endif
 
+#if defined(__PSVITA__)
+        PSVITA_free(Packed_Read_Buffer);
+#else
         free(Packed_Read_Buffer);
+#endif
+
         return(Dest_Buffer);
     }
 }
@@ -1344,16 +1366,25 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
         // Allocated the necessary room for the patterns
         int max_lines = (PATTERN_LEN * nPatterns);
 
+#if defined(__PSVITA__)
+        // Free the patterns block
+        if(RawPatterns) PSVITA_free(RawPatterns);
+#else
         // Free the patterns block
         if(RawPatterns) free(RawPatterns);
+#endif
 
 #if defined(__PSP__)
         RawPatterns = (unsigned char *) AUDIO_malloc_64(&max_lines);
-        if(!RawPatterns) return(FALSE);
+#else
+#if defined(__PSVITA__)
+        RawPatterns = (unsigned char *) PSVITA_malloc(max_lines);
 #else
         RawPatterns = (unsigned char *) malloc(max_lines);
-        if(!RawPatterns) return(FALSE);
 #endif
+#endif
+
+        if(!RawPatterns) return(FALSE);
 
         // Multi notes
         Mod_Dat_Read(Channels_MultiNotes, sizeof(char) * Songtracks);
@@ -1431,7 +1462,6 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
 
             }
 #endif
-
             for(int slwrite = 0; slwrite < MAX_INSTRS_SPLITS; slwrite++)
             {
                 Mod_Dat_Read(&SampleType[swrite][slwrite], sizeof(char));
@@ -1480,8 +1510,13 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
 #endif
                                                      );
 
+#if defined(__PSVITA__)
+                        Sample_Dest_Buffer = (short *) PSVITA_malloc((Save_Len * 2 * sizeof(short)) + 8);
+#else
                         Sample_Dest_Buffer = (short *) malloc((Save_Len * 2 * sizeof(short)) + 8);
                         memset(Sample_Dest_Buffer, 0, (Save_Len * 2 * sizeof(short)) + 8);
+#endif
+
                         // Interpolate samples
                         for(iSmp = 0; iSmp < Save_Len; iSmp++)
                         {
@@ -1521,7 +1556,6 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
 #endif
                                                                       );
                     }
-                    //*(RawSamples[swrite][0][slwrite]) = 0;
 
                     // Stereo flag
                     Mod_Dat_Read(&Sample_Channels[swrite][slwrite], sizeof(char));
@@ -1545,8 +1579,13 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
 #endif
                                                          );
 
+#if defined(__PSVITA__)
+                            Sample_Dest_Buffer = (short *) PSVITA_malloc((Save_Len * 2 * sizeof(short)) + 8);
+#else
                             Sample_Dest_Buffer = (short *) malloc((Save_Len * 2 * sizeof(short)) + 8);
                             memset(Sample_Dest_Buffer, 0, (Save_Len * 2 * sizeof(short)) + 8);
+#endif
+
                             for(iSmp = 0; iSmp < Save_Len; iSmp++)
                             {
                                 Sample1 = Sample_Buffer[iSmp];
@@ -1582,9 +1621,13 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
 #endif
                                                                           );
                         }
-                        //*RawSamples[swrite][1][slwrite] = 0;
                     }
+
+#if defined(__PSVITA__)
+                    if(Sample_Buffer) PSVITA_free(Sample_Buffer);
+#else
                     if(Sample_Buffer) free(Sample_Buffer);
+#endif
 
                 }// Exist Sample
 #endif // PTK_INSTRUMENTS
@@ -1608,6 +1651,7 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
             Mod_Dat_Read(&FRez[twrite], sizeof(int));
             Mod_Dat_Read(&DThreshold[twrite], sizeof(float));
             Mod_Dat_Read(&DClamp[twrite], sizeof(float));
+
 #if defined(PTK_COMPRESSOR)
             if(compressor)
             {
@@ -1636,7 +1680,7 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
         }
 #endif
 
-        // Tracks compressors
+        // Tracks compressors.
         Mod_Dat_Read(&Comp_Flag, sizeof(char));
 #if defined(PTK_LIMITER_TRACKS)
         if(Comp_Flag)
@@ -1646,7 +1690,7 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
             Mod_Dat_Read(&Compress_Track, sizeof(char) * Songtracks);
         }
 #endif
-        
+
         Mod_Dat_Read(&Feedback, sizeof(float));
 
 #if defined(PTK_COMPRESSOR)
@@ -1808,17 +1852,8 @@ void PTKEXPORT Ptk_SetPosition(int new_position)
     if(new_position >= Song_Length) new_position = Song_Length - 1;
     if(new_position < 0) new_position = 0;
 
-/*#if !defined(__WINAMP__)
-    Song_Playing_Pattern = 0;
-#endif*/
-
     Song_Position = new_position;
     Pattern_Line = 0;
-    //Song_Position_Visual = new_position;
-    //PosInTick = 0;
-    //PosInTick_Delay = 0;
-    //SubCounter = 0;
-    //Subicounter = 0;
 
 #if defined(PTK_FX_PATTERNLOOP)
     // No repeat loop
@@ -2043,7 +2078,11 @@ void PTKEXPORT Ptk_Stop(void)
 
 #if defined(__STAND_ALONE__) && !defined(__WINAMP__)
     // Free the patterns block
+#if defined(__PSVITA__)
+    if(RawPatterns) PSVITA_free(RawPatterns);
+#else
     if(RawPatterns) free(RawPatterns);
+#endif
     RawPatterns = NULL;
 #endif
 
@@ -2469,13 +2508,16 @@ void Sp_Player(void)
 
 #if defined(PTK_303)
     float Signal_303 = 0.0f;
+    int fired_303_1;
+    int fired_303_2;
+    int trigger_note_off;
 #endif
 
     char gotsome;
     int c;
     int i;
     int j;
-    int trigger_note_off;
+    int ct;
 
 #if defined(PTK_SYNTH) || defined(PTK_INSTRUMENTS)
     float dest_volume;
@@ -2516,7 +2558,72 @@ void Sp_Player(void)
             Patbreak_Line = 255;
 #endif
 
-            for(int ct = 0; ct < Songtracks; ct++)
+#if defined(PTK_303)
+            fired_303_1 = FALSE;
+            fired_303_2 = FALSE;
+
+            for(ct = 0; ct < Songtracks; ct++)
+            {
+                int efactor = Get_Pattern_Offset(pSequence[Song_Position], ct, Pattern_Line);
+                
+                // Was a note off (always available even if channels are turned off)
+                trigger_note_off = FALSE;
+                for(i = 0; i < Channels_MultiNotes[ct]; i++)
+                {
+                    pl_note[i] = *(RawPatterns + efactor + PATTERN_NOTE1 + (i * 2));
+                    if(pl_note[i] == 120)
+                    {
+                        trigger_note_off = TRUE;
+                    }
+                }
+
+                // Store the effects
+                for(i = 0; i < Channels_Effects[ct]; i++)
+                {
+                    pl_eff_row[i] = *(RawPatterns + efactor + PATTERN_FX + (i * 2));
+                    pl_dat_row[i] = *(RawPatterns + efactor + PATTERN_FXDATA + (i * 2));
+
+#if !defined(__STAND_ALONE__)
+                    // Check if the user is recording 303 effects
+                    // In that case we don't read the row data
+                    if(!sr_isrecording)
+#endif
+                    {
+                        live303(pl_eff_row[i], pl_dat_row[i]);
+                    }
+
+                    // 303 are always available
+                    // since they aren't "really" bounded to any track
+                    if(pl_eff_row[i] == 0x31)
+                    {
+                        track3031 = ct;
+                        Fire303(pl_dat_row[i], 0);
+                        fired_303_1 = TRUE;
+                    }
+                    if(pl_eff_row[i] == 0x32)
+                    {
+                        track3032 = ct;
+                        Fire303(pl_dat_row[i], 1);
+                        fired_303_2 = TRUE;
+                   }
+                }
+
+#if defined(PTK_303)
+                // There was a note off on any notes slot and no 303 was fired,
+                // see if a 303 is running on that track
+                if(trigger_note_off && (!fired_303_1 || !fired_303_2))
+                {
+                    noteoff303(ct);
+                }
+#endif
+
+            }
+
+            Go303();
+
+#endif
+
+            for(ct = 0; ct < Songtracks; ct++)
             {
                 int efactor = Get_Pattern_Offset(pSequence[Song_Position], ct, Pattern_Line);
                 
@@ -2530,48 +2637,11 @@ void Sp_Player(void)
                 pl_vol_row = *(RawPatterns + efactor + PATTERN_VOLUME);
                 pl_pan_row = *(RawPatterns + efactor + PATTERN_PANNING);
                 
-                // Store the effects
                 for(i = 0; i < Channels_Effects[ct]; i++)
                 {
                     pl_eff_row[i] = *(RawPatterns + efactor + PATTERN_FX + (i * 2));
                     pl_dat_row[i] = *(RawPatterns + efactor + PATTERN_FXDATA + (i * 2));
-
-#if defined(PTK_303)
-
-#if !defined(__STAND_ALONE__)
-                    // Check if the user is recording 303 effects
-                    // In that case we don't read the row data
-                    if(!sr_isrecording)
-#endif
-                    {
-                        live303(pl_eff_row[i], pl_dat_row[i]);
-
-                    }
-
-                    // 303 are always available
-                    // since they aren't "really" bounded to any track
-                    if(pl_eff_row[i] == 0x31)
-                    {
-                        track3031 = ct;
-                        Fire303(pl_dat_row[i], 0);
-                    }
-                    if(pl_eff_row[i] == 0x32)
-                    {
-                        track3032 = ct;
-                        Fire303(pl_dat_row[i], 1);
-                    }
-#endif
-
                 }
-
-#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
-                // Check if the user is recording 303 effects
-                // In that case we don't read the row data
-                if(!sr_isrecording)
-                {
-                    Actualize_303_Ed(0);
-                }
-#endif
 
 #if defined(PTK_VOLUME_COLUMN) || defined(PTK_FX_SETVOLUME)
                 for(i = 0; i < Channels_Effects[ct]; i++)
@@ -2611,6 +2681,14 @@ void Sp_Player(void)
                 {
                     TPan[ct] = (float) pl_pan_row * 0.0078125f; 
                     ComputeStereo(ct);
+
+#if !defined(__STAND_ALONE__)
+                    if(userscreen == USER_SCREEN_TRACK_EDIT)
+                    {
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_SET_PANNING;
+                    }
+#endif
+
                 }
 
                 // Don't check those fx if the channel isn't active
@@ -2662,7 +2740,7 @@ void Sp_Player(void)
                 glide = 0;
                 for(i = 0; i < Channels_Effects[ct]; i++)
                 {
-                    if(pl_eff_row[i] == 9) toffset = pl_dat_row[i];
+                    if(pl_eff_row[i] == 0x9) toffset = pl_dat_row[i];
                     else if(pl_eff_row[i] == 5) glide = 1;
                 }
 
@@ -2778,12 +2856,10 @@ void Sp_Player(void)
                 }
 
                 // Was a note off (always available even if channels are turned off)
-                trigger_note_off = FALSE;
                 for(i = 0; i < Channels_MultiNotes[ct]; i++)
                 {
                     if(pl_note[i] == 120)
                     {
-                        trigger_note_off = TRUE;
                         if(Note_Sub_Channels[ct][i] != -1)
                         {
                             j = Reserved_Sub_Channels[ct][i];
@@ -2817,29 +2893,15 @@ void Sp_Player(void)
                     }
                 }
 
-#if defined(PTK_303)
-                // There was a note off on any notes slot,
-                // see if a 303 is running on that track
-                if(trigger_note_off)
-                {
-                    noteoff303(ct);
-                }
-#endif
-
 #if defined(PTK_FX_PATTERNLOOP)
-            if(Chan_Active_State[Song_Position][ct])
-            {
-                Do_Pattern_Loop(ct);
-            }
+                if(Chan_Active_State[Song_Position][ct])
+                {
+                    Do_Pattern_Loop(ct);
+                }
 #endif
 
 
             } // Channels loop
-
-
-#if defined(PTK_303)
-            Go303();
-#endif
 
         } // Pos in tick == 0
 
@@ -3679,9 +3741,6 @@ ByPass_Wav:
             fstep1 = POWF2(SIN[(int) (gr_value * 359.0f)] * FLANGER_AMPL[c]);
             fstep2 = POWF2(SIN[(int) (de_value * 359.0f)] * FLANGER_AMPL[c]);
             
-            //fstep1 = POWF2(sinf(FLANGER_GR[c]) * FLANGER_AMPL[c]);
-            //fstep2 = POWF2(sinf(FLANGER_GR[c] + FLANGER_DEPHASE[c]) * FLANGER_AMPL[c]);
-            
             FLANGER_OFFSET2[c] += fstep1;
             FLANGER_OFFSET1[c] += fstep2;  
 
@@ -4437,7 +4496,8 @@ void Do_Effects_Tick_0(void)
 {
 
 #if defined(PTK_FX_ARPEGGIO) || defined(PTK_FX_VIBRATO) || defined(PTK_FX_REVERSE) || defined(PTK_SHUFFLE) || \
-    defined(PTK_FX_SETREVCUTO) || defined(PTK_FX_SETREVRESO) || defined(PTK_FX_SETBPM) || defined(PTK_FX_SETSPEED)
+    defined(PTK_FX_SETREVCUTO) || defined(PTK_FX_SETREVRESO) || defined(PTK_LIMITER_TRACKS) || defined(PTK_FX_SETBPM) || \
+    defined(PTK_FX_SETSPEED)
 
     int i;
     int j;
@@ -4500,6 +4560,7 @@ void Do_Effects_Tick_0(void)
 #if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
                     gui_bpm_action = TRUE;
 #endif
+
                     break;
 #endif
 
@@ -4511,7 +4572,7 @@ void Do_Effects_Tick_0(void)
 #if !defined(__STAND_ALONE__)
                     if(userscreen == USER_SCREEN_FX_SETUP_EDIT)
                     {
-                        Display_Reverb_Cutoff();
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_REVERB_FILTER;
                     }
 #endif
 
@@ -4526,7 +4587,7 @@ void Do_Effects_Tick_0(void)
 #if !defined(__STAND_ALONE__)
                     if(userscreen == USER_SCREEN_FX_SETUP_EDIT)
                     {
-                        Display_Reverb_Resonance();
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_REVERB_FILTER;
                     }
 #endif
 
@@ -4535,13 +4596,12 @@ void Do_Effects_Tick_0(void)
 
 #if defined(PTK_LIMITER_TRACKS)
                 case 0x29:
-
                     Compress_Track[trackef] = pltr_dat_row[j] & TRUE;
 
 #if !defined(__STAND_ALONE__)
                     if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
                     {
-                        Display_Track_Compressor_Status(trackef);
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_COMPRESSOR;
                     }
 #endif
 
@@ -4555,7 +4615,7 @@ void Do_Effects_Tick_0(void)
 #if !defined(__STAND_ALONE__)
                     if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
                     {
-                        Display_Track_Compressor(trackef);
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_COMPRESSOR;
                     }
 #endif
 
@@ -4569,7 +4629,7 @@ void Do_Effects_Tick_0(void)
 #if !defined(__STAND_ALONE__)
                     if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
                     {
-                        Display_Track_Compressor(trackef);
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_COMPRESSOR;
                     }
 #endif
 
@@ -4708,7 +4768,9 @@ void Do_Effects_Ticks_X(void)
     int64 pltr_eff_row[MAX_FX];
 #endif
 
+#if defined(PTK_FX_0) || defined(PTK_FX_X)
     int64 pltr_dat_row[MAX_FX];
+#endif
 
     for(int trackef = 0; trackef < Songtracks; trackef++)
     {
@@ -4806,8 +4868,8 @@ void Do_Effects_Ticks_X(void)
     defined(PTK_FX_FINEPITCHUP) || defined(PTK_FX_FINEPITCHDOWN) || \
     defined(PTK_FX_SENDTODELAYCOMMAND) || defined(PTK_FX_SENDTOREVERBCOMMAND) || \
     defined(PTK_FX_SETDISTORTIONTHRESHOLD) || defined(PTK_FX_SETDISTORTIONCLAMP) || \
-    defined(PTK_FX_SETFILTERRESONANCE) || defined(PTK_FX_SWITCHFLANGER) || \
-    defined(PTK_FX_TRACK_FILTER_LFO)
+    defined(PTK_FX_SETCUTOFF) || defined(PTK_FX_SETFILTERRESONANCE) || defined(PTK_FX_SWITCHFLANGER) || \
+    defined(PTK_FX_TRACK_FILTER_LFO) || defined(PTK_FX_SETFILTERTYPE)
 
             // Only at tick 0 but after instruments data
             if(PosInTick == 0)
@@ -4868,6 +4930,14 @@ void Do_Effects_Ticks_X(void)
                     // $11 Send to reverb Command
                     case 0x11:
                         DSend[trackef] = (float) pltr_dat_row[k] / 255.0f;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_SEND_TO_REVERB;
+                        }
+#endif
+
                         break;
 #endif
 
@@ -4875,6 +4945,14 @@ void Do_Effects_Ticks_X(void)
                     // $12 Set distortion Threshold
                     case 0x12:
                         DThreshold[trackef] = (float) pltr_dat_row[k] * 128.0f;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_DISTO_THRESHOLD;
+                        }
+#endif
+
                         break;
 #endif
 
@@ -4882,6 +4960,29 @@ void Do_Effects_Ticks_X(void)
                     // $13 Set distortion clamp
                     case 0x13: 
                         DClamp[trackef] = (float) pltr_dat_row[k] * 128.0f;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_DISTO_CLAMP;
+                        }
+#endif
+
+                        break;
+#endif
+
+#if defined(PTK_FX_SETCUTOFF)
+                    // $08 Set filter cutoff
+                    case 0x8:
+                        TCut[trackef] = (float) pltr_dat_row[k] / 2.0f;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_FILTER_CUTOFF;
+                        }
+#endif
+
                         break;
 #endif
 
@@ -4889,6 +4990,14 @@ void Do_Effects_Ticks_X(void)
                     // $14 Set filter resonance
                     case 0x14:
                         FRez[trackef] = (int) (pltr_dat_row[k] / 2);
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_FILTER_RESONANCE;
+                        }
+#endif
+
                         break;
 #endif
 
@@ -4896,6 +5005,14 @@ void Do_Effects_Ticks_X(void)
                     // $24 Switch flanger on/off
                     case 0x24:
                         FLANGER_ON[trackef] = (int) pltr_dat_row[k] & 1;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_FLANGER;
+                        }
+#endif
+
                         break;
 #endif
 
@@ -4903,9 +5020,38 @@ void Do_Effects_Ticks_X(void)
                     // $28 Switch track filter on/off
                     case 0x28:
                         LFO_ON[trackef] = (int) pltr_dat_row[k] & 1;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_LFO;
+                        }
+#endif
+
                         break;
 #endif
+
+#if defined(PTK_FX_SETFILTERTYPE)
+                    // $15 Set filter Type
+                    case 0x15:
+                        if(pltr_dat_row[k] <= MAX_FILTER)
+                        {
+                            FType[trackef] = (int) pltr_dat_row[k];
+
+#if !defined(__STAND_ALONE__)
+                            if(userscreen == USER_SCREEN_TRACK_EDIT)
+                            {
+                                gui_action_external |= GUI_UPDATE_EXTERNAL_FILTER_TYPE;
+                            }
+#endif
+                        
+                        }
+                        break;
+#endif
+
+
                 }
+
             }
 
 #endif
@@ -4991,13 +5137,6 @@ void Do_Effects_Ticks_X(void)
                     break;
 #endif
 
-#if defined(PTK_FX_SETCUTOFF)
-                // $08 SetCutOff
-                case 0x8:
-                    TCut[trackef] = (float) pltr_dat_row[k] / 2.0f;
-                    break;
-#endif
-
 #if defined(PTK_FX_SETRANDOMCUTOFF)
                 // $0a SetRandomCutOff
                 case 0xa:
@@ -5007,6 +5146,14 @@ void Do_Effects_Ticks_X(void)
 
                         if(TCut[trackef] < 1) TCut[trackef] = 1;
                         if(TCut[trackef] > 127) TCut[trackef] = 127;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_FILTER_CUTOFF;
+                        }
+#endif
+                    
                     }
                     break;
 #endif
@@ -5018,6 +5165,14 @@ void Do_Effects_Ticks_X(void)
                     {
                         TCut[trackef] += pltr_dat_row[k];
                         if(TCut[trackef] > 127) TCut[trackef] = 127;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_FILTER_CUTOFF;
+                        }
+#endif
+
                     }
                     break;
 #endif
@@ -5029,6 +5184,14 @@ void Do_Effects_Ticks_X(void)
                     {
                         TCut[trackef] -= pltr_dat_row[k];
                         if(TCut[trackef] < 1) TCut[trackef] = 1;
+
+#if !defined(__STAND_ALONE__)
+                        if(userscreen == USER_SCREEN_TRACK_EDIT)
+                        {
+                            gui_action_external |= GUI_UPDATE_EXTERNAL_FILTER_CUTOFF;
+                        }
+#endif
+
                     }
                     break;
 #endif
@@ -5098,13 +5261,6 @@ void Do_Effects_Ticks_X(void)
                                                 Pattern_Line);
                         }
                     }
-                    break;
-#endif
-
-#if defined(PTK_FX_SETFILTERTYPE)
-                // $15 Set filter Type
-                case 0x15:
-                    if(pltr_dat_row[k] <= MAX_FILTER) FType[trackef] = (int) pltr_dat_row[k];
                     break;
 #endif
 
@@ -5448,7 +5604,7 @@ void Get_Player_Values(void)
 #if defined(PTK_FILTER_LOHIBAND)
 void ComputeCoefs(int freq, int r, int t)
 {
-    float omega = float(2 * PI * Kutoff(freq) / fMIX_RATE);
+    float omega = float(2 * PI * Cutoff(freq) / fMIX_RATE);
     float sn = (float) sinf(omega);
     float cs = (float) cosf(omega);
     float alpha;
@@ -5530,7 +5686,7 @@ float Filter(int stereo, float x, char i)
 }
 #endif
 
-float Kutoff(int v)
+float Cutoff(int v)
 {
     return POWF((v + 5.0f) / (127.0f + 5.0f), 1.7f) * 13000.0f + 30.0f;
 }
@@ -5738,41 +5894,146 @@ float filter2px(int stereo, int ch, float input, float f, float q)
 #if defined(PTK_303)
 void live303(int pltr_eff_row, int pltr_dat_row)
 {
+
+#if !defined(__STAND_ALONE__)
+    int change_303_unit = 0;
+    int change_303_param = 0;
+#endif
+
     switch(pltr_eff_row)
     {
-        case 0x33: tb303[0].cutoff = pltr_dat_row / 2; break;
-        case 0x34: tb303[1].cutoff = pltr_dat_row / 2; break;
-        case 0x35: tb303[0].resonance = pltr_dat_row / 2; break;
-        case 0x36: tb303[1].resonance = pltr_dat_row / 2; break;
-        case 0x37: tb303[0].envmod = pltr_dat_row / 2; break;
-        case 0x38: tb303[1].envmod = pltr_dat_row / 2; break;
-        case 0x39: tb303[0].decay = pltr_dat_row / 2; break;
-        case 0x3a: tb303[1].decay = pltr_dat_row / 2; break;
-        case 0x3b: tb303[0].accent = pltr_dat_row / 2; break;
-        case 0x3c: tb303[1].accent = pltr_dat_row / 2; break;
-        case 0x3d: tb303[0].tune = pltr_dat_row / 2; break;
-        case 0x3e: tb303[1].tune = pltr_dat_row / 2; break;
+        case 0x33:
+            tb303[0].cutoff = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_1_CUTOFF;
+#endif
+
+            break;
+        case 0x34:
+            tb303[1].cutoff = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_2_CUTOFF;
+#endif
+
+            break;
+        case 0x35:
+            tb303[0].resonance = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_1_RESONANCE;
+#endif
+
+            break;
+        case 0x36:
+            tb303[1].resonance = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_2_RESONANCE;
+#endif
+
+            break;
+        case 0x37:
+            tb303[0].envmod = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_1_ENVMOD;
+#endif
+
+            break;
+        case 0x38:
+            tb303[1].envmod = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_2_ENVMOD;
+#endif
+
+            break;
+        case 0x39:
+            tb303[0].decay = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_1_DECAY;
+#endif
+
+            break;
+        case 0x3a:
+            tb303[1].decay = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_2_DECAY;
+#endif
+
+            break;
+        case 0x3b:
+            tb303[0].accent = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_1_ACCENT;
+#endif
+
+            break;
+        case 0x3c:
+            tb303[1].accent = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_2_ACCENT;
+#endif
+
+            break;
+        case 0x3d:
+            tb303[0].tune = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_1_TUNE;
+#endif
+
+            break;
+        case 0x3e:
+            tb303[1].tune = pltr_dat_row / 2;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_2_TUNE;
+#endif
+
+            break;
         case 0x3f: 
             if(pltr_dat_row < 1) pltr_dat_row = 1;
             if(pltr_dat_row > 16) pltr_dat_row = 16;
             tb303[0].scale = pltr_dat_row;
             tb303engine[0].tbCurMultiple = tb303[0].scale;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_1_SCALE;
+#endif
+
             break;
         case 0x40:
             if(pltr_dat_row < 1) pltr_dat_row = 1;
             if(pltr_dat_row > 16) pltr_dat_row = 16;
             tb303[1].scale = pltr_dat_row;
             tb303engine[1].tbCurMultiple = tb303[1].scale;
+
+#if !defined(__STAND_ALONE__)
+            gui_action_external_303 = GUI_UPDATE_EXTERNAL_303_2_SCALE;
+#endif
+
             break;
-        case 0x41: tb303engine[0].tbTargetRealVolume = ((float) pltr_dat_row) / 255.0f; break;
-        case 0x42: tb303engine[1].tbTargetRealVolume = ((float) pltr_dat_row) / 255.0f; break;
+        case 0x41:
+            tb303engine[0].tbTargetRealVolume = ((float) pltr_dat_row) / 255.0f;
+            break;
+        case 0x42:
+            tb303engine[1].tbTargetRealVolume = ((float) pltr_dat_row) / 255.0f;
+            break;
     }
 }
 
 void Fire303(unsigned char number, int unit)
 {
     tb303engine[unit].tbLine = 0;
-   
+    tb303engine[unit].Note_Off = FALSE;
+
     switch(number)
     {
         case 0x00:  tb303engine[unit].tbPattern = tb303[unit].selectedpattern;
@@ -5947,10 +6208,6 @@ void Fire303(unsigned char number, int unit)
             tb303engine[unit].tbTargetRealVolume = 0.0f;
             break;
     }
-
-#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
-    if(!sr_isrecording) Actualize_303_Ed(0);
-#endif
 }
 
 void noteoff303(char strack)
@@ -5967,7 +6224,7 @@ void noteoff303(char strack)
     }
 }
 
-void Go303(void)
+void Go303()
 {
     if(tb303engine[0].tbPattern != 255)
     {
@@ -5975,20 +6232,25 @@ void Go303(void)
         if(tb303engine[0].tbCurMultiple >= tb303[0].scale)
         {
             tb303engine[0].tbCurMultiple = 0;
-            tb303engine[0].tbNoteOn(tb303[0].tone[tb303engine[0].tbPattern][tb303engine[0].tbLine], &tb303[0]);
+            if(!tb303engine[0].Note_Off)
+            {
+                tb303engine[0].tbNoteOn(tb303[0].tone[tb303engine[0].tbPattern][tb303engine[0].tbLine], &tb303[0]);
+            }
             tb303engine[0].tbLine++;
             // End of pattern
             if(tb303engine[0].tbLine == tb303[0].patternlength[tb303engine[0].tbPattern]) tb303engine[0].tbLine = 0;
         }
     }
-
     if(tb303engine[1].tbPattern != 255)
     {
         tb303engine[1].tbCurMultiple++;
         if(tb303engine[1].tbCurMultiple >= tb303[1].scale)
         {
             tb303engine[1].tbCurMultiple = 0;
-            tb303engine[1].tbNoteOn(tb303[1].tone[tb303engine[1].tbPattern][tb303engine[1].tbLine], &tb303[1]);
+            if(!tb303engine[1].Note_Off)
+            {
+                tb303engine[1].tbNoteOn(tb303[1].tone[tb303engine[1].tbPattern][tb303engine[1].tbLine], &tb303[1]);
+            }
             tb303engine[1].tbLine++;
             // End of pattern
             if(tb303engine[1].tbLine == tb303[1].patternlength[tb303engine[1].tbPattern]) tb303engine[1].tbLine = 0; 
@@ -6201,12 +6463,24 @@ void Free_Samples(void)
         {
             if(SampleType[freer][pedsplit] != 0)
             {
+
+#if defined(__PSVITA__)
+                if(RawSamples[freer][0][pedsplit]) PSVITA_free(RawSamples[freer][0][pedsplit]);
+#else
                 if(RawSamples[freer][0][pedsplit]) free(RawSamples[freer][0][pedsplit]);
+#endif
                 RawSamples[freer][0][pedsplit] = NULL;
+
                 if(Sample_Channels[freer][pedsplit] == 2)
                 {
+
+#if defined(__PSVITA__)
+                    if(RawSamples[freer][1][pedsplit]) PSVITA_free(RawSamples[freer][1][pedsplit]);
+#else
                     if(RawSamples[freer][1][pedsplit]) free(RawSamples[freer][1][pedsplit]);
+#endif                    
                     RawSamples[freer][1][pedsplit] = NULL;
+                    
                 }
             }
 
@@ -6412,7 +6686,6 @@ float Do_RMS(float input, float *rms_sum, float *buffer)
 #endif
 
 #if defined(PTK_LIMITER_TRACKS)
-#if !defined(__STAND_ALONE__) || defined(__WINAMP__)
 void Mas_Compressor_Set_Variables_Track(int Track, float threshold, float ratio)
 {
     if(threshold < 0.01f) threshold = 0.01f;
@@ -6424,7 +6697,6 @@ void Mas_Compressor_Set_Variables_Track(int Track, float threshold, float ratio)
     mas_threshold_Track[Track] = threshold * 0.001f;
     mas_ratio_Track[Track] = ratio * 0.01f;
 }
-#endif
 
 float Mas_Compressor_Track(int Track, float input, float *rms_sum, float *buffer, float *env)
 {
@@ -6612,6 +6884,18 @@ float Process_Sample(short *Data, int c, int i, unsigned int res_dec)
 }
 
 #if defined(USE_FASTPOW)
+#if defined(__PSP__)
+float FastPow2(float x)
+{
+	float result;
+
+	__asm__ volatile(
+		"mtv      %1, S000\n"
+		"vexp2.s  S000, S000\n"
+		"mfv      %0, S000\n"
+	: "=r"(result) : "r"(x));
+	return result;
+}
 void ToFloat(int *dest, int val)
 {
     *dest = val;
@@ -6620,6 +6904,28 @@ float FastLog(float i)
 {
 	float x;
 	float y;
+    return i;
+	x = (float) (*(int *) &i);
+	x *= 1.0f / (1 << 23);
+	x = x - 127;
+	y = x - floorf(x);
+	y = (y - y * y) * 0.346607f;
+	return x + y;
+}
+float FastPow(float a, float b)
+{
+    return FastPow2(b * FastLog(a));
+}
+#else
+void ToFloat(int *dest, int val)
+{
+    *dest = val;
+}
+float FastLog(float i)
+{
+	float x;
+	float y;
+    return i;
 	x = (float) (*(int *) &i);
 	x *= 1.0f / (1 << 23);
 	x = x - 127;
@@ -6641,6 +6947,7 @@ float FastPow(float a, float b)
 {
     return FastPow2(b * FastLog(a));
 }
+#endif
 #endif
 
 #if defined(PTK_TRACK_EQ)

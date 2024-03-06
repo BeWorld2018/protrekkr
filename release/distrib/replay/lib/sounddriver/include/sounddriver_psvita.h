@@ -29,34 +29,59 @@
 // SUCH DAMAGE.
 // ------------------------------------------------------
 
-#ifndef __DRAW_PRIMITIVES_H_
-#define __DRAW_PRIMITIVES_H_
+#ifndef _SOUNDDRIVER_PSPVITA_H_
+#define _SOUNDDRIVER_PSPVITA_H_
 
 // ------------------------------------------------------
-// Include
-#include <SDL/SDL.h>
+// Includes
+#include <psp2/audioout.h>
+#include <psp2/kernel/modulemgr.h>
+#include <psp2/kernel/threadmgr.h>
+#include <psp2/kernel/sysmem.h>
+#include <malloc.h>
+#include <string.h>
+
+#define STDCALL
+
+#define TRUE 1
+#define FALSE 0
 
 // ------------------------------------------------------
 // Constants
-#define UPDATE_STACK_SIZE 2048
+#define AUDIO_PCM_FREQ 44100
+#define AUDIO_THREAD_STACKSIZE (1024 * 64)
+#define AUDIO_THREAD_PRIORITY 0x100000FE
+#define AUDIO_DBUF_CHANNELS 2
+#define AUDIO_DBUF_RESOLUTION 16
+#define AUDIO_SAMPLE_ALIGN(s) (((s) + 63) & ~63)
 
 // ------------------------------------------------------
-// Variables
-extern int Cur_Width;
-extern int Cur_Height;
+// Types
+typedef unsigned int Uint32;
+typedef unsigned char Uint8;
+typedef int int32;
+typedef char int8;
 
 // ------------------------------------------------------
 // Functions
-void DrawPixel(int x, int y, int Color);
-void DrawHLine(int y, int x1, int x2, int Color);
-void DrawVLine(int x, int y1, int y2, int Color);
-void SetColor(int color);
-void Fillrect(int x1, int y1, int x2, int y2);
-void UISetPalette(SDL_Color *Palette, int Amount);
-void Copy(SDL_Surface *Source, int x, int y, int x1, int y1, int x2, int y2);
-void Copy_No_Refresh(SDL_Surface *Source, int x, int y, int x1, int y1, int x2, int y2);
-void Copy_To_Surface(SDL_Surface *Source, SDL_Surface *dest, int x, int y, int x1, int y1, int x2, int y2);
-void PrintString(int x, int y, int Font_Type, char *String, int max_x = -1);
-void Push_Update_Rect(int x, int y, int width, int height);
+extern int AUDIO_Latency;
+extern int AUDIO_Milliseconds;
+
+#if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
+void Message_Error(char *Message);
+#endif
+
+int AUDIO_Init_Driver(void (STDCALL *Mixer)(Uint8 *, Uint32));
+int AUDIO_Create_Sound_Buffer(int milliseconds);
+void AUDIO_Stop_Sound_Buffer(void);
+void AUDIO_Stop_Driver(void);
+void AUDIO_Play(void);
+void AUDIO_Stop(void);
+void *PSVITA_malloc(int size);
+void PSVITA_free(void *mem_ptr);
+int AUDIO_IsPlaying(void);
+float AUDIO_GetTime(void);
+int AUDIO_GetSamples(void);
+void AUDIO_ResetTimer(void);
 
 #endif

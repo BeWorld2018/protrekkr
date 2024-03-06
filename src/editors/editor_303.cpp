@@ -105,7 +105,7 @@ void Refresh_303_Unit(int Unit, int gode)
 {
     char tcp[40];
 
-    if(userscreen == USER_SCREEN_TB303_EDIT)
+    if(userscreen == USER_SCREEN_TB303_EDIT && Unit == sl3)
     {
     
         if(gode == 0 ||
@@ -331,7 +331,7 @@ void knob(int x, int y, unsigned char number)
     Skincopy(x, y, number * 25, 147, 24, 24);
 }
 
-void Mouse_Right_303_Ed(void )
+void Mouse_Right_303_Ed(void)
 {
     if(userscreen == USER_SCREEN_TB303_EDIT)
     {
