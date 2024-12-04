@@ -51,6 +51,8 @@
 SystemSoundActionID WavActionID;
 #endif
 
+extern char SplashScreen;
+
 extern int metronome_rows_counter;
 extern int metronome_magnify;
 
@@ -72,16 +74,19 @@ extern int shuffleswitch;
 extern char Use_Cubic;
 extern char Paste_Across;
 
+extern int32 sed_real_range_start;
+extern int32 sed_real_range_end;
+
 unsigned char sl3 = 0;
 
 extern int pos_scope;
 extern int pos_scope_latency;
 
-extern float sp_Tvol_Mod[MAX_TRACKS];
-
-#if defined(__MACOSX_PPC__)
-int Display_Pointer = FALSE;
+#if defined(__USE_OPENGL__)
+extern unsigned int *RGBTexture;
 #endif
+
+extern float sp_Tvol_Mod[MAX_TRACKS];
 
 int CONSOLE_WIDTH;
 int CHANNELS_WIDTH;
@@ -279,6 +284,7 @@ int Table_Left_Tab_Notes[] =
 };
 
 int gui_thread_action = FALSE;
+int gui_thread_can_act = FALSE;
 int gui_bpm_action = FALSE;
 
 int Keyboard_Events_Channels[256];
@@ -537,7 +543,10 @@ int Init_Context(void)
 
     CHDIR(Prog_Path);
 
-    if(!Init_Block_Work()) return(FALSE);
+    if(!Init_Block_Work())
+    {
+        return(FALSE);
+    }
 
 #if !defined(__NO_MIDI__)
     Midi_Reset();
@@ -551,10 +560,6 @@ int Init_Context(void)
 
     LOGOPIC = Load_Skin_Picture("neural.bmp");
     if(!LOGOPIC) return(FALSE);
-#if defined(__MACOSX_PPC__)
-    POINTER = Load_Skin_Picture("pointer.bmp");
-    if(!POINTER) return(FALSE);
-#endif
     SKIN303 = Load_Skin_Picture("303.bmp");
     if(!SKIN303) return(FALSE);
     PFONT = Load_Skin_Picture("pattern_font.bmp");
@@ -564,16 +569,21 @@ int Init_Context(void)
     FONT_LOW = Load_Skin_Picture("font.bmp");
     if(!FONT_LOW) return(FALSE);
 
-    if(!Set_Pictures_Colors()) return(FALSE);
+    if(!Load_Font_Datas("font_datas.txt"))
+    {
+        return(FALSE);
+    }
 
-    if(!Load_Font_Datas("font_datas.txt")) return(FALSE);
+#if defined(__USE_OPENGL__)
+    RGBTexture = (unsigned int *) malloc(TEXTURES_SIZE * TEXTURES_SIZE * sizeof(unsigned int));
+    if(!RGBTexture)
+    {
+        return(FALSE);
+    }
+#endif
 
     SDL_SetColorKey(FONT, SDL_SRCCOLORKEY, 0);
     SDL_SetColorKey(FONT_LOW, SDL_SRCCOLORKEY, 0);
-
-#if defined(__MACOSX_PPC__)
-    SDL_SetColorKey(POINTER, SDL_SRCCOLORKEY, 0);
-#endif
 
     // Player initialization
 #if defined(__WIN32__)
@@ -605,7 +615,12 @@ int Init_Context(void)
 extern int volatile AUDIO_Acknowledge;
 void Destroy_Context(void)
 {
-    if(Timer) SDL_RemoveTimer(Timer);
+    if(Timer)
+    {
+        while(SDL_RemoveTimer(Timer) == FALSE)
+        {
+        };
+    }
     AUDIO_Acknowledge = TRUE;
 
     Ptk_ReleaseDriver();
@@ -624,9 +639,21 @@ void Destroy_Context(void)
     Free_Samples();
 
     // Freeing Allocated Patterns
-    if(RawPatterns) free(RawPatterns);
+    if(RawPatterns)
+    {
+        free(RawPatterns);
+    }
+    RawPatterns = NULL;
 
     Destroy_UI();
+
+#if defined(__USE_OPENGL__)
+    if(RGBTexture)
+    {
+        free(RGBTexture);
+    }
+#endif
+
     SDL_Quit();
 }
 
@@ -656,7 +683,6 @@ int Screen_Update(void)
     {
         redraw_everything = TRUE;
         Env_Change = FALSE;
-        
     }
 
     for(i = 0; i < Channels_Polyphony[Track_Under_Caret]; i++)
@@ -677,26 +703,29 @@ int Screen_Update(void)
         }
     }
 
-    if(Scopish == SCOPE_ZONE_SCOPE) Draw_Scope();
+    if(Scopish == SCOPE_ZONE_SCOPE)
+    {
+        Draw_Scope();
+    }
 
-    // Sample ed.
+    // Sample ed. stuff
     Draw_Wave_Data();
 
     int Lt_vu = (int) (MIN_VUMETER + (((float) L_MaxLevel / 32767.0f) * LARG_VUMETER));
     int Rt_vu = (int) (MIN_VUMETER + (((float) R_MaxLevel / 32767.0f) * LARG_VUMETER));
+    if(Lt_vu > MIN_PEAK) Lt_vu = MIN_PEAK;
+    if(Rt_vu > MIN_PEAK) Rt_vu = MIN_PEAK;
     int Lt_vu_Peak = Lt_vu;
     int Rt_vu_Peak = Rt_vu;
     if(Lt_vu_Peak > MAX_VUMETER - 2) Lt_vu_Peak = MAX_VUMETER - 2;
     if(Rt_vu_Peak > MAX_VUMETER - 2) Rt_vu_Peak = MAX_VUMETER - 2;
-    if(Lt_vu > MIN_PEAK) Lt_vu = MIN_PEAK;
-    if(Rt_vu > MIN_PEAK) Rt_vu = MIN_PEAK;
 
     // Draw the vu meters
-    for(i = MIN_VUMETER ; i < Lt_vu; i += 2)
+    for(i = MIN_VUMETER; i < Lt_vu; i += 2)
     {
         DrawVLine(i, 10, 13, COL_VUMETER);
     }
-    for(i = MIN_VUMETER ; i < Rt_vu; i += 2)
+    for(i = MIN_VUMETER; i < Rt_vu; i += 2)
     {
         DrawVLine(i, 15, 18, COL_VUMETER);
     }
@@ -720,7 +749,10 @@ int Screen_Update(void)
     DrawHLine(17, Rt_vu_Peak, MAX_VUMETER - 2, COL_BACKGROUND);
     DrawHLine(18, Rt_vu_Peak, MAX_VUMETER - 2, COL_BACKGROUND);
 
-    if(actuloop) Afloop();
+    if(actuloop)
+    {
+        Afloop();
+    }
 
     if(gui_action_metronome == GUI_CMD_FLASH_METRONOME_ON)
     {
@@ -729,7 +761,7 @@ int Screen_Update(void)
     }
     if(gui_action_metronome == GUI_CMD_FLASH_METRONOME_OFF)
     {
-        Gui_Draw_Button_Box(72, 82, 16, 16, "", BUTTON_DISABLED);
+        Gui_Draw_Button_Box(72, 82, 16, 16, NULL, BUTTON_DISABLED);
     }
     gui_action_metronome = GUI_CMD_NOP;
 
@@ -1408,12 +1440,27 @@ int Screen_Update(void)
             Draw_303_Ed();
         }
 
-        if(gui_action == GUI_CMD_EXPORT_WAV)
+        if(gui_action == GUI_CMD_EXPORT_WHOLE_WAV ||
+           gui_action == GUI_CMD_EXPORT_SEL_WAV ||
+           gui_action == GUI_CMD_EXPORT_LOOP_WAV)
         {
             char buffer[64];
             char wav_filename[MAX_PATH];
 
-            Status_Box("Writing Wav Header And Sample Data...");
+            switch(gui_action)
+            {
+                case GUI_CMD_EXPORT_SEL_WAV:
+                    Status_Box("Writing Wav Header And Selected Sample Data Range...");
+                    break;
+
+                case GUI_CMD_EXPORT_WHOLE_WAV:
+                    Status_Box("Writing Wav Header And Whole Sample Data...");
+                    break;
+
+                case GUI_CMD_EXPORT_LOOP_WAV:
+                    Status_Box("Writing Wav Header And Sample Data Loop...");
+                    break;
+            }
 
             WaveFile RF;
 
@@ -1437,11 +1484,34 @@ int Screen_Update(void)
             else t_stereo = TRUE;
 
             Uint32 woff = 0;
+            Uint32 wend = 0;
 
             short *eSamples = RawSamples[Current_Instrument][0][Current_Instrument_Split];
             short *erSamples = RawSamples[Current_Instrument][1][Current_Instrument_Split];
 
-            while(woff < Sample_Length[Current_Instrument][Current_Instrument_Split])
+            switch(gui_action)
+            {
+                case GUI_CMD_EXPORT_SEL_WAV:
+                    woff = sed_real_range_start;
+                    wend = sed_real_range_end;
+                    eSamples += woff;
+                    erSamples += woff;
+                    break;
+
+                case GUI_CMD_EXPORT_WHOLE_WAV:
+                    woff = 0;
+                    wend = Sample_Length[Current_Instrument][Current_Instrument_Split];
+                    break;
+
+                case GUI_CMD_EXPORT_LOOP_WAV:
+                    woff = LoopStart[Current_Instrument][Current_Instrument_Split];
+                    wend = LoopEnd[Current_Instrument][Current_Instrument_Split];
+                    eSamples += woff;
+                    erSamples += woff;
+                    break;
+            }
+
+            while(woff < wend)
             {
                 if(t_stereo) RF.WriteStereoSample(*eSamples++, *erSamples++);
                 else RF.WriteMonoSample(*eSamples++);
@@ -1449,29 +1519,40 @@ int Screen_Update(void)
             }
 
             // Write the looping info
-            if(LoopType[Current_Instrument][Current_Instrument_Split])
+            if(gui_action != GUI_CMD_EXPORT_SEL_WAV)
             {
-                RiffChunkHeader header;
-                WaveSmpl_ChunkData datas;
+                if(LoopType[Current_Instrument][Current_Instrument_Split])
+                {
+                    RiffChunkHeader header;
+                    WaveSmpl_ChunkData datas;
 
-                header.ckID = FourCC("smpl");
-                header.ckSize = 0x3c;
+                    header.ckID = FourCC("smpl");
+                    header.ckSize = 0x3c;
 
-                memset(&datas, 0, sizeof(datas));
-                datas.Num_Sample_Loops = 1;
-                datas.Start = LoopStart[Current_Instrument][Current_Instrument_Split];
-                datas.End = LoopEnd[Current_Instrument][Current_Instrument_Split];
+                    memset(&datas, 0, sizeof(datas));
+                    datas.Num_Sample_Loops = 1;
+                    if(gui_action == GUI_CMD_EXPORT_LOOP_WAV)
+                    {
+                        // Whole sample is the loop
+                        datas.Start = 0;
+                        datas.End = wend;
+                    }
+                    else
+                    {
+                        datas.Start = LoopStart[Current_Instrument][Current_Instrument_Split];
+                        datas.End = LoopEnd[Current_Instrument][Current_Instrument_Split];
+                    }
 
-                header.ckSize = Swap_32(header.ckSize);
+                    header.ckSize = Swap_32(header.ckSize);
 
-                datas.Num_Sample_Loops = Swap_32(datas.Num_Sample_Loops);
-                datas.Start = Swap_32(datas.Start);
-                datas.End = Swap_32(datas.End);
+                    datas.Num_Sample_Loops = Swap_32(datas.Num_Sample_Loops);
+                    datas.Start = Swap_32(datas.Start);
+                    datas.End = Swap_32(datas.End);
 
-                RF.WriteData((void *) &header, sizeof(header));
-                RF.WriteData((void *) &datas, sizeof(datas));
+                    RF.WriteData((void *) &header, sizeof(header));
+                    RF.WriteData((void *) &datas, sizeof(datas));
+                }
             }
-
             RF.Close();
             if(strlen(SampleName[Current_Instrument][Current_Instrument_Split])) sprintf(buffer, "File '%s' Saved.", SampleName[Current_Instrument][Current_Instrument_Split]);
             else sprintf(buffer, "File 'Untitled.wav' Saved.");
@@ -1733,13 +1814,6 @@ int Screen_Update(void)
             Actualize_Sample_Ed(teac);
         }
 
-#if defined(__MACOSX_PPC__)
-        if(gui_action == GUI_CMD_REFRESH_PALETTE)
-        {
-            Display_Pointer = TRUE;
-        }
-#endif
-
         if(gui_action == GUI_CMD_EXIT)
         {
             Display_Requester(&Exit_Requester, GUI_CMD_NOP, NULL, TRUE);
@@ -1755,7 +1829,8 @@ int Screen_Update(void)
         Fillrect(0, 0, CONSOLE_WIDTH, CONSOLE_HEIGHT);
 
         last_index = -1;
-        Gui_Draw_Button_Box(MIN_VUMETER - 4, 6, (MAX_VUMETER - MIN_VUMETER) + 6, 16, "", BUTTON_NORMAL | BUTTON_DISABLED);
+        // Box around the vu-meters
+        Gui_Draw_Button_Box(MIN_VUMETER - 4, 6, (MAX_VUMETER - MIN_VUMETER) + 6, 16, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
 
         Display_Master_Comp();
         Display_Master_Volume();
@@ -1775,22 +1850,22 @@ int Screen_Update(void)
 
         Gui_Draw_Button_Box(0, 6, 16, 16, "\011", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
 
-        Gui_Draw_Button_Box(0, 180, fsize, 2, "", BUTTON_NORMAL | BUTTON_DISABLED);
+        Gui_Draw_Button_Box(0, 180, fsize, 2, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
 
-        Gui_Draw_Button_Box(0, 24, 96, 78, "", BUTTON_NORMAL | BUTTON_DISABLED);
+        Gui_Draw_Button_Box(0, 24, 96, 78, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
         
         Gui_Draw_Button_Box(8, 46, 80, 16, "\254", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
         Notify_Play();
         Start_Rec();
         Notify_Edit();
 
-        Gui_Draw_Button_Box(98, 24, 156, 78, "", BUTTON_NORMAL | BUTTON_DISABLED);
+        Gui_Draw_Button_Box(98, 24, 156, 78, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(106, 28, 80, 16, "Position", BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(106, 46, 80, 16, "Pattern", BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(106, 64, 80, 16, "Song Length", BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(106, 82, 80, 16, "Pattern Lines", BUTTON_NORMAL | BUTTON_DISABLED);
 
-        Gui_Draw_Button_Box(256, 24, 136, 78, "", BUTTON_NORMAL | BUTTON_DISABLED);
+        Gui_Draw_Button_Box(256, 24, 136, 78, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
 
         Gui_Draw_Button_Box(262, 28, 38, 16, "Tracks", BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(302, 28, 9, 16, I_, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_SMALL_FONT);
@@ -1799,7 +1874,7 @@ int Screen_Update(void)
         Gui_Draw_Button_Box(262, 64, 60, 16, "Ticks/Beat", BUTTON_NORMAL | BUTTON_DISABLED);
         Display_Beat_Time();
 
-        Gui_Draw_Button_Box(0, 104, 392, 42, "", BUTTON_NORMAL | BUTTON_DISABLED);
+        Gui_Draw_Button_Box(0, 104, 392, 42, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(8, 108, 80, 16, "Instrument", BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(320, 108, 64, 16, "Delete", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
         Gui_Draw_Button_Box(8, 126, 80, 16, "Step Add", BUTTON_NORMAL | BUTTON_DISABLED);
@@ -1810,7 +1885,7 @@ int Screen_Update(void)
         Gui_Draw_Button_Box(332 + 18, 126, 16, 16, "\013", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
         Gui_Draw_Button_Box(332 + (18 * 2), 126, 16, 16, "\014", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
 
-        Gui_Draw_Button_Box(0, 148, 392, 30, "", BUTTON_NORMAL | BUTTON_DISABLED);
+        Gui_Draw_Button_Box(0, 148, 392, 30, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(8, 152, 61, 10, S_ E_ L_ DOT_ SPC_ T_ R_ A_ C_ K_, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE | BUTTON_SMALL_FONT);
         Gui_Draw_Button_Box(8, 164, 61, 10, S_ E_ L_ DOT_ SPC_ N_ O_ T_ E_, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE | BUTTON_SMALL_FONT);
 
@@ -1843,9 +1918,10 @@ int Screen_Update(void)
 
         Draw_Pattern_Right_Stuff();
         Actupated(0);
+        redraw_everything = FALSE;
     }
 
-    if(gui_thread_action)
+    if(gui_thread_action && gui_thread_can_act)
     {
         gui_thread_action = FALSE;
         Actupated(0);
@@ -2018,12 +2094,6 @@ int Screen_Update(void)
         }
 
         // --------------------------------------
-//        if(!sr_isrecording)
-  //      {
-            //Actualize_Track_Ed(15);
-            //Actualize_Track_Fx_Ed(11);
-    //    }
-
         Actupated(0);
         player_line = Pattern_Line_Visual;
     }
@@ -2048,8 +2118,10 @@ int Screen_Update(void)
             gui_action = GUI_CMD_TIMED_REFRESH_SEQUENCER;
         }
     }
-
-    Check_Requester(&Title_Requester);
+    if(SplashScreen)
+    {
+        Check_Requester(&Title_Requester);
+    }
 
     if(Check_Requester(&Overwrite_Requester) == 2)
     {
@@ -2593,7 +2665,7 @@ void Notify_Edit(void)
     {
         Gui_Draw_Button_Box(8, 82, 62, 16, "Edit/Rec.", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
     }
-    Gui_Draw_Button_Box(72, 82, 16, 16, "", BUTTON_DISABLED);
+    Gui_Draw_Button_Box(72, 82, 16, 16, NULL, BUTTON_DISABLED);
     gui_action_metronome = GUI_CMD_FLASH_METRONOME_OFF;
 }
 
@@ -3446,7 +3518,6 @@ Uint32 Timer_CallBack(Uint32 interval, void *param)
             Pack_Module(name);
         }
     }
-
     return(interval);
 }
 
@@ -4615,21 +4686,25 @@ void Keyboard_Handler(void)
                 if(Keys[SDLK_1] || Keys[SDLK_KP1])
                 {
                     Curr_Buff_Block = 0;
+                    Draw_Pattern_Right_Stuff();
                     Actupated(0);
                 }
                 if(Keys[SDLK_2] || Keys[SDLK_KP2])
                 {
                     Curr_Buff_Block = 1;
+                    Draw_Pattern_Right_Stuff();
                     Actupated(0);
                 }
                 if(Keys[SDLK_3] || Keys[SDLK_KP3])
                 {
                     Curr_Buff_Block = 2;
+                    Draw_Pattern_Right_Stuff();
                     Actupated(0);
                 }
                 if(Keys[SDLK_4] || Keys[SDLK_KP4])
                 {
                     Curr_Buff_Block = 3;
+                    Draw_Pattern_Right_Stuff();
                     Actupated(0);
                 }
 
@@ -6519,7 +6594,7 @@ void Display_Shuffle(void)
     Realslider_Size(586 + 40, 6, 100, shuffle_amount, TRUE);
     sprintf(string, "%d%%", shuffle_amount);
     Print_String(string, 586 + 40, 8, 116, BUTTON_TEXT_CENTERED);
-    Gui_Draw_Button_Box(746, 6, Cur_Width - 802, 16, "", BUTTON_NORMAL | BUTTON_DISABLED);
+    Gui_Draw_Button_Box(746, 6, Cur_Width - 802, 16, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
 }
 
 // ------------------------------------------------------
@@ -6880,7 +6955,7 @@ void Draw_Scope(void)
     if(Scopish == SCOPE_ZONE_SCOPE)
     {
         SetColor(COL_BACKGROUND);
-        Fillrect(394, 42, Cur_Width, 178);
+        Fillrect(394, 42, Cur_Width, 179);
 
         cur_pos_x = 0;
         if(Scopish_LeftRight)
@@ -7028,9 +7103,8 @@ void Draw_Scope_Files_Button(void)
     switch(Scopish)
     {
         case SCOPE_ZONE_SCOPE:
-            SetColor(COL_BACKGROUND);
-            bjbox(394, 42, 405, 137);
-            Gui_Draw_Button_Box(394, 24, Cur_Width - 522, 16, "", BUTTON_NORMAL | BUTTON_DISABLED);
+            Draw_Scope();
+            Gui_Draw_Button_Box(394, 24, Cur_Width - 522, 16, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
             Gui_Draw_Button_Box(Cur_Width - 54, 6, 16, 16, "\255", BUTTON_PUSHED | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
 
             Display_Dirs_Icons(0);

@@ -1,6 +1,6 @@
 CXX = g++
 
-LIBS = -lSDL -lsdldraw -lz -lstdc++ -lsupc++ -lgame
+LIBS = -lGL -lSDL -lsdldraw -lz -lstdc++ -lsupc++ -lgame
 
 FLAGS = -O3 -std=c++98 -fno-strict-aliasing -ffast-math -fno-rtti -fno-exceptions -w -I/usr/local/include -L/usr/local/lib -Lsrc/extralibs/sdl_draw -Lsrc/extralibs/zlib-1.2.3 \
         -D __GCC__ -D __NO_MIDI__ -D __MOT_SWAP__ -D__HAIKU__
@@ -32,7 +32,6 @@ protrekkr: $(EXEOBJS)
 	$(CXX) -o ./release/distrib/ptk_haiku -L./ $(FLAGS) $(EXEOBJS) $(LIBS)
 	strip -s -x ./release/distrib/ptk_haiku
 	chmod +x ./release/distrib/ptk_haiku
-#	-rm -f $(EXEOBJS)
 	
 ptk.o: src/ptk.cpp
 	$(CXX) -c -o $(@) $(FLAGS) $<

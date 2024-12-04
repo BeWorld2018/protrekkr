@@ -48,10 +48,13 @@ extern char *Font_Ascii;
 extern int Nbr_Letters;
 extern int Font_Pos[256];
 extern int Font_Size[256];
-#if defined(__MACOSX_PPC__)
-extern unsigned char *Pointer_BackBuf;
-#endif
 int FgColor;
+#if defined(__USE_OPENGL__)
+unsigned int *RGBTexture;
+SDL_Color GLPalette[256];
+extern GLuint FONT_GL;
+extern GLuint FONT_LOW_GL;
+#endif
 
 int Nbr_Update_Rects;
 SDL_Rect Update_Stack[UPDATE_STACK_SIZE];
@@ -60,27 +63,247 @@ SDL_Rect Update_Stack[UPDATE_STACK_SIZE];
 // Functions
 int Get_Char_Position(char *Ascii_Letters, int Max_Letters, char Letter);
 
+#if defined(__USE_OPENGL__)
+// ------------------------------------------------------
+// Set 2d ortho mode
+void Enter_2D_Mode(float Width, float Height)
+{
+    double _Width = Width;
+    double _Height = Height;
+
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0.0, _Width, _Height, 0.0, 0.0, 1.0);
+}
+
+// ------------------------------------------------------
+// Restore previous matrices mode
+void Leave_2d_Mode(void)
+{
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+    glPopMatrix();
+}
+
+// ------------------------------------------------------
+// Draw a horizontal line
+void Draw_HLine_(int x, int y, int Width, int Color)
+{
+    glPushMatrix();
+        glTranslatef(x, y, 0.0f);
+        glColor4f((float) Ptk_Palette[Color].r / 255.0f,
+                  (float) Ptk_Palette[Color].g / 255.0f,
+                  (float) Ptk_Palette[Color].b / 255.0f,
+                  (float) Ptk_Palette[Color].unused / 255.0f);
+        glBegin(GL_QUADS);
+            glVertex2f(0.0f, 0.0f);
+            glVertex2f(0.0f, 1.0f);
+            glVertex2f(Width, 1.0f);
+            glVertex2f(Width, 0.0f);
+        glEnd();
+    glPopMatrix();
+}
+
+// ------------------------------------------------------
+// Draw a vertical line
+void Draw_VLine_(int x, int y, int Height, int Color)
+{
+    glPushMatrix();
+        glTranslatef(x, y, 0.0f);
+        glColor4f((float) Ptk_Palette[Color].r / 255.0f,
+                  (float) Ptk_Palette[Color].g / 255.0f,
+                  (float) Ptk_Palette[Color].b / 255.0f,
+                  (float) Ptk_Palette[Color].unused / 255.0f);
+        glBegin(GL_QUADS);
+            glVertex2f(0.0f, 0.0f);
+            glVertex2f(0.0f, Height);
+            glVertex2f(1.0f, Height);
+            glVertex2f(1.0f, 0.0f);
+        glEnd();
+    glPopMatrix();
+}
+
+// ------------------------------------------------------
+// Draw a vertical line
+void Draw_Pixel_(int x, int y, int Color)
+{
+    glPushMatrix();
+        glTranslatef(x, y, 0.0f);
+        glColor4f((float) Ptk_Palette[Color].r / 255.0f,
+                  (float) Ptk_Palette[Color].g / 255.0f,
+                  (float) Ptk_Palette[Color].b / 255.0f,
+                  (float) Ptk_Palette[Color].unused / 255.0f);
+        glBegin(GL_QUADS);
+            glVertex2f(0.0f, 0.0f);
+            glVertex2f(0.0f, 1.0f);
+            glVertex2f(1.0f, 1.0f);
+            glVertex2f(1.0f, 0.0f);
+        glEnd();
+    glPopMatrix();
+}
+
+// ------------------------------------------------------
+// Draw a one colored rectangle
+void Draw_Flat_Rectangle(float x, float y,
+                         int Width, int Height, int Color)
+{
+    glPushMatrix();
+        glTranslatef(x, y, 0.0f);
+        glColor4f((float) Ptk_Palette[Color].r / 255.0f,
+                  (float) Ptk_Palette[Color].g / 255.0f,
+                  (float) Ptk_Palette[Color].b / 255.0f,
+                  (float) Ptk_Palette[Color].unused / 255.0f);
+        glBegin(GL_QUADS);
+            glVertex2f(0.0f, 0.0f);
+            glVertex2f(0.0f, Height);
+            glVertex2f(Width, Height);
+            glVertex2f(Width, 0.0f);
+        glEnd();
+    glPopMatrix();
+}
+
+// ------------------------------------------------------
+// Create a texture
+GLuint Create_Texture(SDL_Surface *Source)
+{
+    GLuint txId = 0;
+    unsigned char *SrcPic;
+    int was_locked = FALSE;
+    int i;
+    int j;
+    int index;
+
+    if(SDL_MUSTLOCK(Source))
+    {
+        if(!SDL_LockSurface(Source)) was_locked = TRUE;
+    }
+
+    memset(RGBTexture, 0, TEXTURES_SIZE * TEXTURES_SIZE * sizeof(unsigned int));
+    SrcPic = (unsigned char *) Source->pixels;
+    for(j = 0; j < Source->h; j++)
+    {
+        for(i = 0; i < Source->w; i++)
+        {
+            index = SrcPic[(j * Source->pitch) + i];
+#if defined(__BIG_ENDIAN__)
+            RGBTexture[(j * TEXTURES_SIZE) + i] = (GLPalette[index].r << 24) | (GLPalette[index].g << 16) | (GLPalette[index].b << 8);
+            if(index)
+            {
+                RGBTexture[(j * TEXTURES_SIZE) + i] |= 0xff;
+            }
+#else
+            RGBTexture[(j * TEXTURES_SIZE) + i] = (GLPalette[index].r) | (GLPalette[index].g << 8) | (GLPalette[index].b << 16);
+            if(index)
+            {
+                RGBTexture[(j * TEXTURES_SIZE) + i] |= 0xff000000;
+            }
+#endif
+        }
+    }
+    glGenTextures(1, &txId);
+    if(txId)
+    {
+        glDisable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, txId);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TEXTURES_SIZE, TEXTURES_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, RGBTexture);
+    }
+    if(was_locked)
+    {
+        SDL_UnlockSurface(Source);
+    }
+    return(txId);
+}
+
+// ------------------------------------------------------
+// Delete a previously created texture
+void Destroy_Texture(GLuint *txId)
+{
+    glDeleteTextures(1, txId);
+    glFlush();
+}
+
+// ------------------------------------------------------
+// Draw bitmap
+void Draw_Tx_Quad(float x, float y, float x1, float y1, float Width, float Height, GLuint TexID, int Blend)
+{
+    if(TexID != -1)
+    {
+        glPushMatrix();
+            glTranslatef(x, y, 0.0f);
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+            if(Blend)
+            {
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            }
+            glBindTexture(GL_TEXTURE_2D, TexID);
+            glEnable(GL_TEXTURE_2D);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glBegin(GL_QUADS);
+                glTexCoord2f((x1 / (float) TEXTURES_SIZE), (y1 / (float) TEXTURES_SIZE)); glVertex2f(0.0f, 0.0f);
+                glTexCoord2f((x1 / (float) TEXTURES_SIZE), (Height / (float) TEXTURES_SIZE) + (y1 / (float) TEXTURES_SIZE)); glVertex2f(0.0f, Height);
+                glTexCoord2f((Width / (float) TEXTURES_SIZE) + (x1 / (float) TEXTURES_SIZE), (Height / (float) TEXTURES_SIZE) + (y1 / (float) TEXTURES_SIZE)); glVertex2f(Width, Height);
+                glTexCoord2f((Width / (float) TEXTURES_SIZE) + (x1 / (float) TEXTURES_SIZE), y1 / (float) TEXTURES_SIZE); glVertex2f(Width, 0.0f);
+            glEnd();
+            if(Blend)
+            {
+                glDisable(GL_BLEND);
+            }
+            glDisable(GL_TEXTURE_2D);
+        glPopMatrix();
+    }
+}
+#endif
+
 // ------------------------------------------------------
 // Draw a pixel
 void DrawPixel(int x, int y, int Color)
 {
+
+#if defined(__USE_OPENGL__)
+    Draw_Pixel_(x, y, Color);
+#else
     Draw_Pixel(Main_Screen, x, y, Color);
+#endif
+
 }
 
 // ------------------------------------------------------
 // Draw an horizontal line
 void DrawHLine(int y, int x1, int x2, int Color)
 {
+
+#if defined(__USE_OPENGL__)
+    Draw_HLine_(x1, y, (x2 - x1) + 1, Color);
+#else
     Draw_HLine(Main_Screen, x1, y, x2, Color);
     Push_Update_Rect(x1, y, x2 - x1, y + 1);
+#endif
+
 }
 
 // ------------------------------------------------------
 // Draw a vertical line
 void DrawVLine(int x, int y1, int y2, int Color)
 {
+
+#if defined(__USE_OPENGL__)
+    Draw_VLine_(x, y1, (y2 - y1) + 1, Color);
+#else
     Draw_VLine(Main_Screen, x, y1, y2, Color);
     Push_Update_Rect(x, y1, x + 1, y2 - y1);
+#endif
+
 }
 
 // ------------------------------------------------------
@@ -94,6 +317,10 @@ void SetColor(int color)
 // Fill a rectangle with the current color
 void Fillrect(int x1, int y1, int x2, int y2)
 {
+
+#if defined(__USE_OPENGL__)
+    Draw_Flat_Rectangle(x1, y1, x2 - x1, y2 - y1, FgColor);
+#else
     SDL_Rect Dst_Rect;
     Dst_Rect.x = x1;
     Dst_Rect.y = y1;
@@ -101,6 +328,8 @@ void Fillrect(int x1, int y1, int x2, int y2)
     Dst_Rect.h = y2 - y1;
     SDL_FillRect(Main_Screen, &Dst_Rect, FgColor);
     Push_Update_Rect(x1, y1, x2 - x1, y2 - y1);
+#endif
+
 }
 
 // ------------------------------------------------------
@@ -114,14 +343,6 @@ void UISetPalette(SDL_Color *Palette, int Amount)
     if(FONT)
     {
         SDL_SetPalette(FONT, SDL_LOGPAL, Palette, 0, Amount);
-    }
-    if(SKIN303)
-    {
-        SDL_SetPalette(SKIN303, SDL_LOGPAL, Palette, 0, Amount);
-    }
-    if(LOGOPIC)
-    {
-        SDL_SetPalette(LOGOPIC, SDL_LOGPAL, Palette, 0, Amount);
     }
     if(Temp_PFONT)
     {
@@ -148,20 +369,29 @@ void UISetPalette(SDL_Color *Palette, int Amount)
         SDL_SetPalette(Temp_NOTESMALLPFONT, SDL_LOGPAL, Palette, 0, Amount);
     }
 
-#if defined(__MACOSX_PPC__)
-    if(POINTER)
+#if !defined(__USE_OPENGL__)
+    SDL_SetPalette(Main_Screen, SDL_PHYSPAL, Palette, 0, Amount);
+    SDL_SetPalette(Main_Screen, SDL_LOGPAL, Palette, 0, Amount);
+#else
+    int i;
+
+    for(i = 0; i < Amount; i++)
     {
-        SDL_SetPalette(POINTER, SDL_LOGPAL, Palette, 0, Amount);
+        GLPalette[i].r = Palette[i].r;
+        GLPalette[i].g = Palette[i].g;
+        GLPalette[i].b = Palette[i].b;
     }
 #endif
 
-    SDL_SetPalette(Main_Screen, SDL_PHYSPAL, Palette, 0, Amount);
-    SDL_SetPalette(Main_Screen, SDL_LOGPAL, Palette, 0, Amount);
 }
 
 // ------------------------------------------------------
 // Copy a surface onto the main screen
+#if defined(__USE_OPENGL__)
+void Copy(GLuint Source,
+#else
 void Copy(SDL_Surface *Source,
+#endif
           int x, int y,
           int x1, int y1,
           int x2, int y2)
@@ -179,13 +409,26 @@ void Copy(SDL_Surface *Source,
     Src_Rect.w = Dst_Rect.w;
     Src_Rect.h = Dst_Rect.h;
 
+#if defined(__USE_OPENGL__)
+    Draw_Tx_Quad(x, y,
+                 x1, y1,
+                 Dst_Rect.w,
+                 Dst_Rect.h,
+                 Source, FALSE);
+#else
     SDL_BlitSurface(Source, &Src_Rect, Main_Screen, &Dst_Rect);
     Push_Update_Rect(x, y, Dst_Rect.w, Dst_Rect.h);
+#endif
+
 }
 
 // ------------------------------------------------------
 // Copy a surface onto the main screen without recording the rect
+#if defined(__USE_OPENGL__)
+void Copy_No_Refresh(GLuint Source,
+#else
 void Copy_No_Refresh(SDL_Surface *Source,
+#endif
           int x, int y,
           int x1, int y1,
           int x2, int y2)
@@ -203,7 +446,15 @@ void Copy_No_Refresh(SDL_Surface *Source,
     Src_Rect.w = Dst_Rect.w;
     Src_Rect.h = Dst_Rect.h;
 
+#if defined(__USE_OPENGL__)
+    Draw_Tx_Quad(x, y,
+                 x1, y1,
+                 Dst_Rect.w, 
+                 Dst_Rect.h,
+                 Source, FALSE);
+#else
     SDL_BlitSurface(Source, &Src_Rect, Main_Screen, &Dst_Rect);
+#endif
 }
 
 // ------------------------------------------------------
@@ -275,6 +526,7 @@ void PrintString(int x,
         Dst_Rect.x = pos_x;
         Dst_Rect.w = Src_Rect.w;
 
+#if !defined(__USE_OPENGL__)
         if(Font_Type == USE_FONT)
         {
             SDL_BlitSurface(FONT, &Src_Rect, Main_Screen, &Dst_Rect);
@@ -283,86 +535,28 @@ void PrintString(int x,
         {
             SDL_BlitSurface(FONT_LOW, &Src_Rect, Main_Screen, &Dst_Rect);
         }
+#else
+        if(Font_Type == USE_FONT)
+        {
+            Draw_Tx_Quad(Dst_Rect.x, Dst_Rect.y,
+                         Src_Rect.x, Src_Rect.y,
+                         Dst_Rect.w, Dst_Rect.h,
+                         FONT_GL, TRUE);
+        }
+        else
+        {
+            Draw_Tx_Quad(Dst_Rect.x, Dst_Rect.y,
+                         Src_Rect.x, Src_Rect.y,
+                         Dst_Rect.w, Dst_Rect.h,
+                         FONT_LOW_GL, TRUE);
+        }
+
+#endif
+
         x += Font_Size[Idx];
         if(early_exit) break;
     }
 }
-
-// ------------------------------------------------------
-// Display or clear the mouse pointer at given coordinates
-#if defined(__MACOSX_PPC__)
-void Display_Mouse_Pointer(int x, int y, int clear)
-{
-    int was_locked;
-    int main_was_locked;
-
-    if(x >= Cur_Width) return;
-    if(y >= Cur_Height) return;
-    
-    main_was_locked = FALSE;
-    if(SDL_MUSTLOCK(Main_Screen))
-    {
-        if(!SDL_LockSurface(Main_Screen)) main_was_locked = TRUE;
-    }
-
-    was_locked = FALSE;
-    if(SDL_MUSTLOCK(POINTER))
-    {
-        if(!SDL_LockSurface(POINTER)) was_locked = TRUE;
-    }
-
-    int i;
-    int j;
-    int Src_offset;
-    int Dst_offset;
-    int Len_Dst = Main_Screen->pitch * Main_Screen->h;
-    unsigned char *SrcPix = (unsigned char *) POINTER->pixels;
-    unsigned char *DstPix = (unsigned char *) Main_Screen->pixels;
-
-    for(j = 0; j < POINTER->h; j++)
-    {
-        for(i = 0; i < POINTER->w; i++)
-        {
-            Src_offset = (j * POINTER->pitch) + i;
-            Dst_offset = ((j + y) * Main_Screen->pitch) + (i + x);
-            if(Dst_offset >= 0)
-            {
-                if(((i + x) < (Cur_Width - 1)) &&
-                   ((j + y) < (Cur_Height - 1)))
-                {
-                    if(clear)
-                    {
-                        if(SrcPix[Src_offset])
-                        {
-                            DrawPixel((i + x), (j + y), Pointer_BackBuf[Src_offset]);
-                        }
-                    } 
-                    else
-                    {
-                        if(SrcPix[Src_offset])
-                        {
-                            Pointer_BackBuf[Src_offset] = DstPix[Dst_offset];
-                            DrawPixel((i + x), (j + y), SrcPix[Src_offset]);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if(was_locked)
-    {
-        SDL_UnlockSurface(POINTER);
-    }
-
-    if(main_was_locked)
-    {
-        SDL_UnlockSurface(Main_Screen);
-    }
-
-    Push_Update_Rect(x, y, POINTER->w, POINTER->h);
-}
-#endif
 
 // ------------------------------------------------------
 // See if a rect have to be scheduled or not

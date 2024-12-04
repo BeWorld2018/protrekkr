@@ -6,6 +6,8 @@
 *.netbsd*
 *.freebsd*
 *.linux*
+*arm64*
+*.haiku*
 *.dsw*
 *.dsp*
 *.sln*
@@ -28,7 +30,6 @@
 *.303*
 *.snd*
 *.aif*
-*module.s*
 *stderr*
 *stdout*
 *windows*
@@ -40,4 +41,6 @@
 *bin2c*
 *.app*
 *debug*
+*Debug*
 *release*
+*Release*

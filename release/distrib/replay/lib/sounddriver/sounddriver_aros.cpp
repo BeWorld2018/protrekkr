@@ -48,6 +48,8 @@ struct AHIRequest *join;
 short *AHIbuf;
 short *AHIbuf2;
 int volatile Thread_Running;
+int32 old_sigbit;
+void *old_sigtask;
 
 #include <string.h>
 #if defined(USE_SDL_THREADS)
@@ -79,8 +81,8 @@ int AUDIO_Thread(void *arg)
 void *AUDIO_Thread(void *arg)
 #endif
 {
-    int32 old_sigbit = AHImp->mp_SigBit;
-    void *old_sigtask = AHImp->mp_SigTask;
+    old_sigbit = AHImp->mp_SigBit;
+    old_sigtask = AHImp->mp_SigTask;
     AHImp->mp_SigBit = AllocSignal(-1);
     AHImp->mp_SigTask = FindTask(NULL);
 
@@ -91,10 +93,10 @@ void *AUDIO_Thread(void *arg)
             struct AHIRequest *io = AHIio;
             short *buf = AHIbuf;
         
-            AUDIO_Acknowledge = FALSE;
             if(AUDIO_Play_Flag)
             {
                 AUDIO_Mixer((Uint8 *) buf, AUDIO_SoundBuffer_Size);
+                AUDIO_Acknowledge = FALSE;
             }
             else
             {
@@ -118,7 +120,10 @@ void *AUDIO_Thread(void *arg)
             io->ahir_Position = 0x8000;
             io->ahir_Link = join;
             SendIO((struct IORequest *) io);
-            if(join) WaitIO((struct IORequest *) join);
+            if(join)
+            {
+                WaitIO((struct IORequest *) join);
+            }
             join = io;
             AHIio = AHIio2;
             AHIio2 = io;
@@ -130,21 +135,8 @@ void *AUDIO_Thread(void *arg)
         }
         usleep(10);
     }
-    if (join)
-    {
-        AbortIO((struct IORequest *) join);
-        WaitIO((struct IORequest *) join);
-    }
-    FreeSignal(AHImp->mp_SigBit);
-    AHImp->mp_SigBit = old_sigbit;
-    AHImp->mp_SigTask = old_sigtask;
     Thread_Running = 1;
-    
-    #if !defined(USE_SDL_THREADS)
-        pthread_exit(0);
-    #endif
-
-    return(0);
+    return(NULL);
 }
 
 // ------------------------------------------------------
@@ -205,13 +197,11 @@ int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
 // Desc: Create an audio buffer of given milliseconds
 int AUDIO_Create_Sound_Buffer(int milliseconds)
 {
-    int num_fragments;
     int frag_size;
 
     if(milliseconds < 10) milliseconds = 10;
     if(milliseconds > 250) milliseconds = 250;
 
-    num_fragments = 6;
     frag_size = (int) (AUDIO_PCM_FREQ * (milliseconds / 1000.0f));
 
 	AUDIO_SoundBuffer_Size = frag_size << 2;
@@ -241,7 +231,11 @@ int AUDIO_Create_Sound_Buffer(int milliseconds)
     }
 
 #if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
+#if defined(USE_SDL_THREADS)
+    Message_Error("Error while calling SDL_CreateThread()");
+#else
     Message_Error("Error while calling pthread_create()");
+#endif
 #endif
 
     Thread_Running = 0;
@@ -342,6 +336,14 @@ void AUDIO_Stop_Sound_Buffer(void)
             usleep(10);
         }
         hThread = 0;
+        if(join)
+        {
+            AbortIO((struct IORequest *) join);
+            WaitIO((struct IORequest *) join);
+        }
+        FreeSignal(AHImp->mp_SigBit);
+        AHImp->mp_SigBit = old_sigbit;
+        AHImp->mp_SigTask = old_sigtask;
     }
     FreeVec(AHIbuf);
     FreeVec(AHIbuf2);

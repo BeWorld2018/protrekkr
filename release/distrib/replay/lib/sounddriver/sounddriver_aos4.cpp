@@ -49,6 +49,8 @@ struct AHIRequest *join;
 short *AHIbuf;
 short *AHIbuf2;
 int volatile Thread_Running;
+int32 old_sigbit;
+void *old_sigtask;
 pthread_t hThread;
 
 int AUDIO_SoundBuffer_Size;
@@ -68,10 +70,17 @@ void AUDIO_Synth_Play(void);
 // Desc: Audio rendering
 void *AUDIO_Thread(void *arg)
 {
-    int32 old_sigbit = AHImp->mp_SigBit;
-    void *old_sigtask = AHImp->mp_SigTask;
+    struct sched_param p;
+    
+    old_sigbit = AHImp->mp_SigBit;
+    old_sigtask = AHImp->mp_SigTask;
     AHImp->mp_SigBit = IExec->AllocSignal(-1);
     AHImp->mp_SigTask = IExec->FindTask(NULL);
+
+    memset(&p, 0, sizeof(p));
+    p.sched_priority = 1;
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &p);
+
     while(Thread_Running)
     {
         if(AHIbuf)
@@ -79,10 +88,10 @@ void *AUDIO_Thread(void *arg)
             struct AHIRequest *io = AHIio;
             short *buf = AHIbuf;
     
-            AUDIO_Acknowledge = FALSE;
             if(AUDIO_Play_Flag)
             {
                 AUDIO_Mixer((Uint8 *) buf, AUDIO_SoundBuffer_Size);
+                AUDIO_Acknowledge = FALSE;
             }
             else
             {
@@ -106,27 +115,23 @@ void *AUDIO_Thread(void *arg)
             io->ahir_Position = 0x8000;
             io->ahir_Link = join;
             IExec->SendIO((struct IORequest *) io);
-            if (join) IExec->WaitIO((struct IORequest *) join);
+            if(join)
+            {
+                IExec->WaitIO((struct IORequest *) join);
+            }
             join = io;
-            AHIio = AHIio2; AHIio2 = io;
-            AHIbuf = AHIbuf2; AHIbuf2 = buf;
+            AHIio = AHIio2;
+            AHIio2 = io;
+            AHIbuf = AHIbuf2;
+            AHIbuf2 = buf;
 
             AUDIO_Samples += AUDIO_SoundBuffer_Size;
             AUDIO_Timer = ((((float) AUDIO_Samples) * (1.0f / (float) AUDIO_Latency)) * 1000.0f);
         }
         usleep(10);
     }
-    if (join)
-    {
-        IExec->AbortIO((struct IORequest *) join);
-        IExec->WaitIO((struct IORequest *) join);
-    }
-    IExec->FreeSignal(AHImp->mp_SigBit);
-    AHImp->mp_SigBit = old_sigbit;
-    AHImp->mp_SigTask = old_sigtask;
     Thread_Running = 1;
-    pthread_exit(0);
-    return(0);
+    return(NULL);
 }
 
 // ------------------------------------------------------
@@ -134,9 +139,8 @@ void *AUDIO_Thread(void *arg)
 // Desc: Init the audio driver
 int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
 {
-    struct sched_param p;
-    
     AUDIO_Mixer = Mixer;
+
     AHImp = (struct MsgPort *) IExec->AllocSysObject(ASOT_PORT, NULL);
 
 #if !defined(__STAND_ALONE__) && !defined(__WINAMP__)
@@ -166,7 +170,9 @@ int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
         return(FALSE);
     }
     AHIio->ahir_Version = 4;
-    if (IExec->OpenDevice("ahi.device", 0, (struct IORequest *) AHIio, 0))
+
+    // Open ahi AHI_NO_UNIT
+    if (IExec->OpenDevice(AHINAME, AHI_DEFAULT_UNIT, (struct IORequest *) AHIio, 0))
     {
         AHIio->ahir_Std.io_Device = NULL;
 
@@ -176,12 +182,11 @@ int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
 
         return(FALSE);
     }
+
+    // Copy for double buffering
     IExec->CopyMem(AHIio, AHIio2, sizeof(struct AHIRequest));
 
-    memset(&p, 0, sizeof(p));
-    p.sched_priority = 1;
-    pthread_setschedparam(pthread_self(), SCHED_FIFO, &p);
-
+    // Create audio buffer
     return(AUDIO_Create_Sound_Buffer(AUDIO_Milliseconds));
 }
 
@@ -190,13 +195,11 @@ int AUDIO_Init_Driver(void (*Mixer)(Uint8 *, Uint32))
 // Desc: Create an audio buffer of given milliseconds
 int AUDIO_Create_Sound_Buffer(int milliseconds)
 {
-    int num_fragments;
     int frag_size;
 
     if(milliseconds < 10) milliseconds = 10;
     if(milliseconds > 250) milliseconds = 250;
 
-    num_fragments = 6;
     frag_size = (int) (AUDIO_PCM_FREQ * (milliseconds / 1000.0f));
 
     AUDIO_SoundBuffer_Size = frag_size << 2;
@@ -215,6 +218,7 @@ int AUDIO_Create_Sound_Buffer(int milliseconds)
     }
     
     Thread_Running = 1;
+
     if(pthread_create(&hThread, NULL, AUDIO_Thread, NULL) == 0)
     {
         return(TRUE);
@@ -233,14 +237,14 @@ int AUDIO_Create_Sound_Buffer(int milliseconds)
 // Desc: Wait for a command acknowledgment from the thread
 void AUDIO_Wait_For_Thread(void)
 {
-    if(AUDIO_Sound_Buffer)
+    if(Thread_Running)
     {
         if(AUDIO_Play_Flag)
         {
             while(AUDIO_Acknowledge)
             {
                 usleep(10);
-            };
+            }
         }
         else
         {
@@ -249,7 +253,7 @@ void AUDIO_Wait_For_Thread(void)
                 while(!AUDIO_Acknowledge)
                 {
                     usleep(10);
-                };
+                }
             }
         }
     }
@@ -313,6 +317,7 @@ void AUDIO_Stop(void)
 void AUDIO_Stop_Sound_Buffer(void)
 {
     AUDIO_Stop();
+
     if(hThread)
     {
         Thread_Running = 0;
@@ -321,6 +326,14 @@ void AUDIO_Stop_Sound_Buffer(void)
             usleep(10);
         }
         hThread = 0;
+        if(join)
+        {
+            IExec->AbortIO((struct IORequest *) join);
+            IExec->WaitIO((struct IORequest *) join);
+        }
+        IExec->FreeSignal(AHImp->mp_SigBit);
+        AHImp->mp_SigBit = old_sigbit;
+        AHImp->mp_SigTask = old_sigtask;
     }
     IExec->FreeVec(AHIbuf);
     IExec->FreeVec(AHIbuf2);

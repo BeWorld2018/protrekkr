@@ -57,14 +57,14 @@
 
 #define MAX_EVENTS 16
 
+#define SDL_GO_FULLSCREEN (SDL_USEREVENT + 1)
+
 // ------------------------------------------------------
 // Structure
 typedef struct
 {
     int x;
     int y;
-    int old_x;
-    int old_y;
     int button;
     int button_oneshot;
     int wheel;
@@ -91,7 +91,7 @@ extern char Keyboard_Name[];
 // Functions
 void Run_Interface(void);
 void Message_Error(char *Message);
-int Switch_FullScreen(int Width, int Height);
+int Switch_FullScreen(int Width, int Height, int Refresh, int Force_Window_Mode);
 int Get_LShift(void);
 int Get_RShift(void);
 int Get_Caps(void);

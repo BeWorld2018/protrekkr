@@ -46,6 +46,7 @@ extern int Cur_Height;
 extern char AutoSave;
 extern char AutoBackup;
 extern char AutoReload;
+extern char SplashScreen;
 extern int Beveled;
 extern char Use_Shadows;
 extern int Continuous_Scroll;
@@ -95,7 +96,7 @@ void Draw_Master_Ed(void)
 
     Draw_Editors_Bar(USER_SCREEN_SETUP_EDIT);
 
-    Gui_Draw_Button_Box(0, (Cur_Height - 153), fsize, 130, "", BUTTON_NORMAL | BUTTON_DISABLED);
+    Gui_Draw_Button_Box(0, (Cur_Height - 153), fsize, 130, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
     Gui_Draw_Flat_Box("UI Setup");
 
     Gui_Draw_Button_Box(8, (Cur_Height - 125), 110, 16, "Metronome (Rows)", BUTTON_NORMAL | BUTTON_DISABLED);
@@ -129,6 +130,7 @@ void Draw_Master_Ed(void)
     Gui_Draw_Button_Box(184, (Cur_Height - 125), 72, 16, "Play While Edit", BUTTON_NORMAL | BUTTON_DISABLED);
     Gui_Draw_Button_Box(184, (Cur_Height - 105), 72, 16, "Auto Backup", BUTTON_NORMAL | BUTTON_DISABLED);
 
+    Gui_Draw_Button_Box(205, (Cur_Height - 65), 51, 16, "Splash S.", BUTTON_NORMAL | BUTTON_DISABLED);
     Gui_Draw_Button_Box(184, (Cur_Height - 45), 72, 16, "Load Last Ptk", BUTTON_NORMAL | BUTTON_DISABLED);
 
     Gui_Draw_Button_Box(734, (Cur_Height - 125), 42, 16, "Accid.", BUTTON_NORMAL | BUTTON_DISABLED);
@@ -137,6 +139,7 @@ void Draw_Master_Ed(void)
 void Actualize_Master_Ed(char gode)
 {
     int Real_Palette_Idx;
+    int RefreshTex = FALSE;
 
     if(userscreen == USER_SCREEN_SETUP_EDIT)
     {
@@ -275,7 +278,10 @@ void Actualize_Master_Ed(char gode)
             Realslider(518, (Cur_Height - 45), Ptk_Palette[Real_Palette_Idx].b / 2, TRUE);
             outlong_small(668, (Cur_Height - 45), Ptk_Palette[Real_Palette_Idx].b, 0, 41, BUTTON_NORMAL | BUTTON_DISABLED);
             Set_Phony_Palette();
-            Refresh_Palette();
+            if(gode) 
+            {
+                RefreshTex = TRUE;
+            }
         }
 
         // Bevel on/off
@@ -294,7 +300,10 @@ void Actualize_Master_Ed(char gode)
                     break;
             }
             Set_Phony_Palette();
-            Refresh_Palette();
+            if(gode) 
+            {
+                RefreshTex = TRUE;
+            }
         }
 
         // Set auto save interval
@@ -429,8 +438,23 @@ void Actualize_Master_Ed(char gode)
             }
         }
 
-        // Load last used ptk
+        // Splash screen
         if(gode == 0 || gode == 24)
+        {
+            if(SplashScreen)
+            {
+                Gui_Draw_Button_Box(258, (Cur_Height - 65), 29, 16, "On", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
+                Gui_Draw_Button_Box(258 + 31, (Cur_Height - 65), 29, 16, "Off", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+            }
+            else
+            {
+                Gui_Draw_Button_Box(258, (Cur_Height - 65), 29, 16, "On", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+                Gui_Draw_Button_Box(258 + 31, (Cur_Height - 65), 29, 16, "Off", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
+            }
+        }
+
+        // Load last used ptk
+        if(gode == 0 || gode == 25)
         {
             if(AutoReload)
             {
@@ -442,6 +466,11 @@ void Actualize_Master_Ed(char gode)
                 Gui_Draw_Button_Box(258, (Cur_Height - 45), 29, 16, "On", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
                 Gui_Draw_Button_Box(258 + 31, (Cur_Height - 45), 29, 16, "Off", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
             }
+        }
+        // There was a palette change
+        if(RefreshTex)
+        {
+            Set_Pictures_And_Palettes(FALSE);
         }
     }
 }
@@ -654,7 +683,7 @@ void Mouse_Left_Master_Ed(void)
             {
                 FullScreen = TRUE;
                 teac = 9;
-                Switch_FullScreen(Cur_Width, Cur_Height);
+                Switch_FullScreen(Cur_Width, Cur_Height, TRUE, FALSE);
             }
         }
 
@@ -665,7 +694,7 @@ void Mouse_Left_Master_Ed(void)
             {
                 FullScreen = FALSE;
                 teac = 9;
-                Switch_FullScreen(Cur_Width, Cur_Height);
+                Switch_FullScreen(Cur_Width, Cur_Height, TRUE, TRUE);
             }
         }
 
@@ -873,11 +902,27 @@ void Mouse_Left_Master_Ed(void)
             gui_action = GUI_CMD_UPDATE_SETUP_ED;
         }
 
+        // Splash Screen on
+        if(zcheckMouse(258, (Cur_Height - 65), 29, 16))
+        {
+            SplashScreen = TRUE;
+            teac = 24;
+            gui_action = GUI_CMD_UPDATE_SETUP_ED;
+        }
+
+        // Splash Screen off
+        if(zcheckMouse(258 + 31, (Cur_Height - 65), 29, 16))
+        {
+            SplashScreen = FALSE;
+            teac = 24;
+            gui_action = GUI_CMD_UPDATE_SETUP_ED;
+        }
+
         // Load Last Ptk on
         if(zcheckMouse(258, (Cur_Height - 45), 29, 16))
         {
             AutoReload = TRUE;
-            teac = 24;
+            teac = 25;
             gui_action = GUI_CMD_UPDATE_SETUP_ED;
         }
 
@@ -885,7 +930,7 @@ void Mouse_Left_Master_Ed(void)
         if(zcheckMouse(258 + 31, (Cur_Height - 45), 29, 16))
         {
             AutoReload = FALSE;
-            teac = 24;
+            teac = 25;
             gui_action = GUI_CMD_UPDATE_SETUP_ED;
         }
     }

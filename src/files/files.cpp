@@ -71,6 +71,7 @@ extern SynthParameters PARASynth[128];
 extern int Beveled;
 char AutoBackup;
 char AutoReload;
+char SplashScreen = TRUE;
 
 int Mod_Length;
 int Mod_Simulate;
@@ -137,7 +138,6 @@ void Init_Tracker_Context_After_ModLoad(void)
     Display_Song_Length();
 
     Scopish = SCOPE_ZONE_MOD_DIR;
-    //Draw_Scope_Files_Button();
 
     Reset_Tracks_To_Render();
 
@@ -269,12 +269,12 @@ int Load_Ptk(char *FileName)
                 goto Read_Mod_File;
 
             // Old noisetrekker
-            //case '2':
-            //    Old_Ntk = TRUE;
+            case '2':
+                Old_Ntk = TRUE;
 
             // Noisetrekker Beta (1.6)
-            //case '1':
-            //    Ntk_Beta = TRUE;
+            case '1':
+                Ntk_Beta = TRUE;
         }
 
 Read_Mod_File:
@@ -563,7 +563,7 @@ Read_Mod_File:
         Set_Default_Channels_Polyphony();
 
         // Reading Track Properties
-        for(twrite = 0; twrite < Songtracks; twrite++)
+        for(twrite = 0; twrite < MAX_TRACKS; twrite++)
         {
             Read_Mod_Data_Swap(&TCut[twrite], sizeof(float), 1, in);
             Read_Mod_Data_Swap(&ICut[twrite], sizeof(float), 1, in);
@@ -637,7 +637,7 @@ Read_Mod_File:
         }
 
         // Reading track part sequence
-        for(tps_pos = 0; tps_pos < 256; tps_pos++)
+        for(tps_pos = 0; tps_pos < MAX_SEQUENCES; tps_pos++)
         {
             for(tps_trk = 0; tps_trk < MAX_TRACKS; tps_trk++)
             {
@@ -650,18 +650,18 @@ Read_Mod_File:
         {
             CCoef[spl] = float((float) CSend[spl] / 127.0f);
         }
-        for(twrite = 0; twrite < Songtracks; twrite++)
+        for(twrite = 0; twrite < MAX_TRACKS; twrite++)
         {
             Read_Mod_Data_Swap(&Chan_Midi_Prg[twrite], sizeof(int), 1, in);
         }
 
-        for(twrite = 0; twrite < Songtracks; twrite++)
+        for(twrite = 0; twrite < MAX_TRACKS; twrite++)
         {
             Read_Mod_Data(&LFO_ON[twrite], sizeof(char), 1, in);
             Read_Mod_Data_Swap(&LFO_RATE[twrite], sizeof(float), 1, in);
             Read_Mod_Data_Swap(&LFO_AMPL[twrite], sizeof(float), 1, in);
         }
-        for(twrite = 0; twrite < Songtracks; twrite++)
+        for(twrite = 0; twrite < MAX_TRACKS; twrite++)
         {
             Read_Mod_Data(&FLANGER_ON[twrite], sizeof(char), 1, in);
             Read_Mod_Data_Swap(&FLANGER_AMOUNT[twrite], sizeof(float), 1, in);
@@ -680,7 +680,7 @@ Read_Mod_File:
             Read_Mod_Data_Swap(&FLANGER_DEPHASE, sizeof(float), 1, in);
         }
 
-        for(tps_trk = 0; tps_trk < Songtracks; tps_trk++)
+        for(tps_trk = 0; tps_trk < MAX_TRACKS; tps_trk++)
         {
             Read_Mod_Data_Swap(&Chan_Mute_State[tps_trk], sizeof(int), 1, in);
         }
@@ -765,7 +765,10 @@ Read_Mod_File:
                             Read_Mod_Data_Swap(&tb303[j].flag[k][i], sizeof(struct flag303), 1, in);
                         }
                     }
-                    Read_Mod_Data(&tb303[j].pattern_name, sizeof(char), 32 * 20, in);
+                    if(!Old_Ntk)
+                    {
+                        Read_Mod_Data(&tb303[j].pattern_name, sizeof(char), 32 * 20, in);
+                    }
                 }
             }
             Read_Mod_Data_Swap(&tb303engine[0].tbVolume, sizeof(float), 1, in);

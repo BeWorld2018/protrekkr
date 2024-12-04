@@ -81,7 +81,7 @@ int list_counter[SCOPE_LAST_DIR];
 int sort_files = TRUE;              // Just in case i would need to make it optional someday
 int nbr_dirs;
 
-FILEENTRY SMPT_LIST[2048];
+FILEENTRY SMPT_LIST[MAX_SMPT_LIST];
 char UpName1[1024];
 char UpName2[1024];
 
@@ -103,7 +103,7 @@ char *cur_dir;
 // Functions
 void Clear_Files_List(void)
 {
-    for(int listcleaner = 0; listcleaner < 2048; listcleaner++)
+    for(int listcleaner = 0; listcleaner < MAX_SMPT_LIST; listcleaner++)
     {
         memset(SMPT_LIST[listcleaner].Name, 0, sizeof(SMPT_LIST[0]));
     }
@@ -667,7 +667,7 @@ void Dump_Files_List(int xr, int yr)
             bjbox(xr - 1, yr + 1, Cur_Width - 412, 137);
 
             // Current dir background
-            Gui_Draw_Button_Box(394, 24, Cur_Width - 522, 16, "", BUTTON_NORMAL | BUTTON_DISABLED);
+            Gui_Draw_Button_Box(394, 24, Cur_Width - 522, 16, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
 
             switch(Scopish)
             {
@@ -815,7 +815,7 @@ void Draw_Lists_Slider(int idx)
     SetColor(COL_SLIDER_MED);
     bjbox(Cur_Width - 17, 59 + idx, 15, 103 - idx);
 
-    Gui_Draw_Button_Box(MAX_PATT_SCREEN_X + 2, 58 + idx + 1, 16 - 2, 32, "", BUTTON_NORMAL);
+    Gui_Draw_Button_Box(MAX_PATT_SCREEN_X + 2, 58 + idx + 1, 16 - 2, 32, NULL, BUTTON_NORMAL);
 
     Gui_Draw_Button_Box(MAX_PATT_SCREEN_X + 1, 42, 16, 14, "\01", BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
     Gui_Draw_Button_Box(MAX_PATT_SCREEN_X + 1, 164, 16, 14, "\02", BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);

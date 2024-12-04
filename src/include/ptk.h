@@ -41,6 +41,7 @@
 #include "../include/variables.h"
 
 #include "../ui/include/misc_draw.h"
+#include "../ui/include/draw_primitives.h"
 #include "../ui/include/requesters.h"
 
 #include "../files/include/files.h"
@@ -87,9 +88,6 @@ class skin_file
 };
 
 extern list <skin_file> skin_files;
-#if defined(__MACOSX_PPC__)
-extern SDL_Surface *POINTER;
-#endif
 extern REQUESTER Exit_Requester;
 
 // ------------------------------------------------------

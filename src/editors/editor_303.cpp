@@ -38,6 +38,9 @@
 // ------------------------------------------------------
 // Variables
 SDL_Surface *SKIN303;
+#if defined(__USE_OPENGL__)
+GLuint SKIN303_GL = -1;
+#endif
 
 int Current_copy_buffer;
 int Copied_Buffer[4];
@@ -52,6 +55,80 @@ int Refresh_Unit;
 
 extern REQUESTER Overwrite_Requester;
 
+typedef struct
+{
+    int x;
+    int y;
+} KNOB_POS, *LPKNOB_POS;
+
+KNOB_POS knobs_pos_table[] = 
+{
+    { 0, 147 },
+    { 1 * 25, 147 },
+    { 2 * 25, 147 },
+    { 3 * 25, 147 },
+    { 4 * 25, 147 },
+    { 5 * 25, 147 },
+    { 6 * 25, 147 },
+    { 7 * 25, 147 },
+    { 8 * 25, 147 },
+    { 9 * 25, 147 },
+    { 10 * 25, 147 },
+    { 11 * 25, 147 },
+    { 12 * 25, 147 },
+    { 13 * 25, 147 },
+    { 14 * 25, 147 },
+    { 15 * 25, 147 },
+    { 16 * 25, 147 },
+    { 17 * 25, 147 },
+    { 18 * 25, 147 },
+    { 19 * 25, 147 },
+    { 20 * 25, 147 },
+    { 21 * 25, 147 },
+    { 22 * 25, 147 },
+    { 23 * 25, 147 },
+    { 24 * 25, 147 },
+    { 25 * 25, 147 },
+    { 26 * 25, 147 },
+    { 27 * 25, 147 },
+    { 28 * 25, 147 },
+    { 29 * 25, 147 },
+    { 30 * 25, 147 },
+    { 31 * 25, 147 },
+
+    { 0, 172 },
+    { 1 * 25, 172 },
+    { 2 * 25, 172 },
+    { 3 * 25, 172 },
+    { 4 * 25, 172 },
+    { 5 * 25, 172 },
+    { 6 * 25, 172 },
+    { 7 * 25, 172 },
+    { 8 * 25, 172 },
+    { 9 * 25, 172 },
+    { 10 * 25, 172 },
+    { 11 * 25, 172 },
+    { 12 * 25, 172 },
+    { 13 * 25, 172 },
+    { 14 * 25, 172 },
+    { 15 * 25, 172 },
+    { 16 * 25, 172 },
+    { 17 * 25, 172 },
+    { 18 * 25, 172 },
+    { 19 * 25, 172 },
+    { 20 * 25, 172 },
+    { 21 * 25, 172 },
+    { 22 * 25, 172 },
+    { 23 * 25, 172 },
+    { 24 * 25, 172 },
+    { 25 * 25, 172 },
+    { 26 * 25, 172 },
+    { 27 * 25, 172 },
+    { 28 * 25, 172 },
+    { 29 * 25, 172 },
+    { 30 * 25, 172 }
+};
+
 // ------------------------------------------------------
 // Fucntions
 void tb303_copy_pattern(void);
@@ -64,7 +141,7 @@ void Draw_303_Ed(void)
 {
     Draw_Editors_Bar(USER_SCREEN_TB303_EDIT);
 
-    Gui_Draw_Button_Box(0, (Cur_Height - 153), fsize, 130, "", BUTTON_NORMAL | BUTTON_DISABLED);
+    Gui_Draw_Button_Box(0, (Cur_Height - 153), fsize, 130, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
     Gui_Draw_Flat_Box("303 Units");
 
     Gui_Draw_Button_Box(8, (Cur_Height - 134), 64, 16, "Reset Patt.", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
@@ -81,7 +158,7 @@ void Draw_303_Ed(void)
     Gui_Draw_Button_Box(600, (Cur_Height - 138), 56, 16, "Patt. Name", BUTTON_NORMAL | BUTTON_DISABLED);
     Gui_Draw_Button_Box(658, (Cur_Height - 138), 34, 16, "Save", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
 
-    Skincopy(80, (Cur_Height - 140), 0, 0, 510, 114);
+    Skin_Copy(80, (Cur_Height - 140), 0, 0, 510, 114);
 
     Gui_Draw_Button_Box(668, (Cur_Height - 60), 64, 16, "Scale", BUTTON_NORMAL | BUTTON_DISABLED | BUTTON_NO_BORDER | BUTTON_TEXT_CENTERED);
 
@@ -119,14 +196,14 @@ void Refresh_303_Unit(int Unit, int gode)
         {
             if(Unit)
             {
-                Skincopy(577, (Cur_Height - 58), 138, 119, 3, 3);
-                Skincopy(558, (Cur_Height - 58), 143, 119, 3, 3);
+                Skin_Copy(577, (Cur_Height - 58), 138, 119, 3, 3);
+                Skin_Copy(558, (Cur_Height - 58), 143, 119, 3, 3);
                 Gui_Draw_Button_Box(668, (Cur_Height - 78), 64, 16, "Tune to 1", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
             }
             else
             {
-                Skincopy(558, (Cur_Height - 58), 138, 119, 3, 3);
-                Skincopy(577, (Cur_Height - 58), 143, 119, 3, 3);
+                Skin_Copy(558, (Cur_Height - 58), 138, 119, 3, 3);
+                Skin_Copy(577, (Cur_Height - 58), 143, 119, 3, 3);
                 Gui_Draw_Button_Box(668, (Cur_Height - 78), 64, 16, "Tune to 2", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
             }
 
@@ -142,31 +219,31 @@ void Refresh_303_Unit(int Unit, int gode)
             int tbank303 = tb303[Unit].selectedpattern / 8;
             tbank303 *= 15;
             // Restoring background
-            Skincopy(86, (Cur_Height - 74), 6, 66, 59, 14);
+            Skin_Copy(86, (Cur_Height - 74), 6, 66, 59, 14);
             // Light the bank
-            Skincopy(86 + tbank303, (Cur_Height - 74), 15 + tbank303, 117, 14, 14);
+            Skin_Copy(86 + tbank303, (Cur_Height - 74), 15 + tbank303, 117, 14, 14);
             // Displaying pattern selection leds
             // Pattern [1-8]
             int tpat303 = tb303[Unit].selectedpattern - (tb303[Unit].selectedpattern / 8) * 8;
             // Restoring background
-            Skincopy(86, (Cur_Height - 116), 6, 24, 59, 30);
+            Skin_Copy(86, (Cur_Height - 116), 6, 24, 59, 30);
             // Light the bank
             if(tpat303 < 4)
             {
-                Skincopy(86 + tpat303 * 15, (Cur_Height - 116), 75 + tpat303 * 15, 117, 14, 14);
+                Skin_Copy(86 + tpat303 * 15, (Cur_Height - 116), 75 + tpat303 * 15, 117, 14, 14);
             }
             else
             {
                 tpat303 -= 4;
-                Skincopy(86 + tpat303 * 15, (Cur_Height - 101), 75 + tpat303 * 15, 132, 14, 14);
+                Skin_Copy(86 + tpat303 * 15, (Cur_Height - 101), 75 + tpat303 * 15, 132, 14, 14);
             }
         }
 
         // Displaying waveform switch
         if(gode == 0 || gode == 2)
         {
-            if(tb303[Unit].waveform) Skincopy(180, (Cur_Height - 128), 137, 135, 13, 8);
-            else Skincopy(180, (Cur_Height - 128), 137, 125, 13, 8);
+            if(tb303[Unit].waveform) Skin_Copy(180, (Cur_Height - 128), 137, 135, 13, 8);
+            else Skin_Copy(180, (Cur_Height - 128), 137, 125, 13, 8);
         }
 
         // Draw 303 Knobs
@@ -181,24 +258,24 @@ void Refresh_303_Unit(int Unit, int gode)
         if(gode == 0 || gode == 9)
         {
             // Restore it
-            Skincopy(88 + 80, 66 + (Cur_Height - 140), 88, 66, 195, 40);
+            Skin_Copy(88 + 80, 66 + (Cur_Height - 140), 88, 66, 195, 40);
 
             // Light a note
             switch(tb303[Unit].tone[tb303[Unit].selectedpattern][editsteps[Unit][tb303[Unit].selectedpattern]])
             {
-                case 0: Skincopy(88 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 1: Skincopy(101 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 2: Skincopy(114 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 3: Skincopy(127 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 4: Skincopy(140 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 5: Skincopy(166 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 6: Skincopy(179 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 7: Skincopy(191 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 8: Skincopy(204 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 9: Skincopy(217 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 10: Skincopy(230 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 11: Skincopy(243 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
-                case 12: Skincopy(269 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 0: Skin_Copy(88 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 1: Skin_Copy(101 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 2: Skin_Copy(114 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 3: Skin_Copy(127 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 4: Skin_Copy(140 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 5: Skin_Copy(166 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 6: Skin_Copy(179 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 7: Skin_Copy(191 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 8: Skin_Copy(204 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 9: Skin_Copy(217 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 10: Skin_Copy(230 + 80, 66 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 11: Skin_Copy(243 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
+                case 12: Skin_Copy(269 + 80, 91 + (Cur_Height - 140), 301, 119, 13, 13); break;
             }
         }
 
@@ -207,13 +284,13 @@ void Refresh_303_Unit(int Unit, int gode)
         {
             if(tb303[Unit].flag[tb303[Unit].selectedpattern][editsteps[Unit][tb303[Unit].selectedpattern]].pause)
             {
-                Skincopy(402, (Cur_Height - 79), 138, 119, 3, 3);
-                Skincopy(439, (Cur_Height - 79), 143, 119, 3, 3);
+                Skin_Copy(402, (Cur_Height - 79), 138, 119, 3, 3);
+                Skin_Copy(439, (Cur_Height - 79), 143, 119, 3, 3);
             }
             else
             {
-                Skincopy(402, (Cur_Height - 79), 143, 119, 3, 3);
-                Skincopy(439, (Cur_Height - 79), 138, 119, 3, 3);
+                Skin_Copy(402, (Cur_Height - 79), 143, 119, 3, 3);
+                Skin_Copy(439, (Cur_Height - 79), 138, 119, 3, 3);
             }
         }
 
@@ -222,11 +299,11 @@ void Refresh_303_Unit(int Unit, int gode)
         {
             if(tb303[Unit].flag[tb303[Unit].selectedpattern][editsteps[Unit][tb303[Unit].selectedpattern]].slide_flag)
             {
-                Skincopy(456, (Cur_Height - 57), 138, 119, 3, 3);
+                Skin_Copy(456, (Cur_Height - 57), 138, 119, 3, 3);
             }
             else
             {
-                Skincopy(456, (Cur_Height - 57), 143, 119, 3, 3);
+                Skin_Copy(456, (Cur_Height - 57), 143, 119, 3, 3);
             }
         }
 
@@ -235,11 +312,11 @@ void Refresh_303_Unit(int Unit, int gode)
         {
             if(tb303[Unit].flag[tb303[Unit].selectedpattern][editsteps[Unit][tb303[Unit].selectedpattern]].accent_flag)
             {
-                Skincopy(431, (Cur_Height - 57), 138, 119, 3, 3);
+                Skin_Copy(431, (Cur_Height - 57), 138, 119, 3, 3);
             }
             else
             {
-                Skincopy(431, (Cur_Height - 57), 143, 119, 3, 3);
+                Skin_Copy(431, (Cur_Height - 57), 143, 119, 3, 3);
             }
         }
 
@@ -248,11 +325,11 @@ void Refresh_303_Unit(int Unit, int gode)
         {
             if(tb303[Unit].flag[tb303[Unit].selectedpattern][editsteps[Unit][tb303[Unit].selectedpattern]].transposeup_flag)
             {
-                Skincopy(406, (Cur_Height - 57), 138, 119, 3, 3);
+                Skin_Copy(406, (Cur_Height - 57), 138, 119, 3, 3);
             }
             else
             {
-                Skincopy(406, (Cur_Height - 57), 143, 119, 3, 3);
+                Skin_Copy(406, (Cur_Height - 57), 143, 119, 3, 3);
             }
         }
 
@@ -261,11 +338,11 @@ void Refresh_303_Unit(int Unit, int gode)
         {
             if(tb303[Unit].flag[tb303[Unit].selectedpattern][editsteps[Unit][tb303[Unit].selectedpattern]].transposedown_flag)
             {
-                Skincopy(381, (Cur_Height - 57), 138, 119, 3, 3);
+                Skin_Copy(381, (Cur_Height - 57), 138, 119, 3, 3);
             }
             else
             {
-                Skincopy(381, (Cur_Height - 57), 143, 119, 3, 3);
+                Skin_Copy(381, (Cur_Height - 57), 143, 119, 3, 3);
             }
         }
 
@@ -273,10 +350,10 @@ void Refresh_303_Unit(int Unit, int gode)
         if(gode == 0 || gode == 15)
         {
             // volume background
-            Skincopy(529, (Cur_Height - 115), 449, 25, 19, 88);
+            Skin_Copy(529, (Cur_Height - 115), 449, 25, 19, 88);
             int tb303v = (int) (tb303engine[Unit].tbVolume * 72.0f);
             // Volume slider
-            Skincopy(531, (Cur_Height - 42) - tb303v, 0, 116, 13, 11);
+            Skin_Copy(531, (Cur_Height - 42) - tb303v, 0, 116, 13, 11);
         }
 
         if(gode == 0 || gode == 18)
@@ -305,30 +382,30 @@ void number303(unsigned char number, int x, int y)
 {
     switch(number)
     {
-        case 0: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 156, 118, 7, 14); break;
-        case 1: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 164, 118, 7, 14); break;
-        case 2: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 172, 118, 7, 14); break;
-        case 3: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 180, 118, 7, 14); break;
-        case 4: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 188, 118, 7, 14); break;
-        case 5: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 196, 118, 7, 14); break;
-        case 6: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 204, 118, 7, 14); break;
-        case 7: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 212, 118, 7, 14); break;
-        case 8: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 220, 118, 7, 14); break;
-        case 9: Skincopy(x, y, 156, 118, 7, 14); Skincopy(x + 8, y, 228, 118, 7, 14); break;
-        case 10: Skincopy(x, y, 164, 118, 7, 14); Skincopy(x + 8, y, 156, 118, 7, 14); break;
-        case 11: Skincopy(x, y, 164, 118, 7, 14); Skincopy(x + 8, y, 164, 118, 7, 14); break;
-        case 12: Skincopy(x, y, 164, 118, 7, 14); Skincopy(x + 8, y, 172, 118, 7, 14); break;
-        case 13: Skincopy(x, y, 164, 118, 7, 14); Skincopy(x + 8, y, 180, 118, 7, 14); break;
-        case 14: Skincopy(x, y, 164, 118, 7, 14); Skincopy(x + 8, y, 188, 118, 7, 14); break;
-        case 15: Skincopy(x, y, 164, 118, 7, 14); Skincopy(x + 8, y, 196, 118, 7, 14); break;
-        case 16: Skincopy(x, y, 164, 118, 7, 14); Skincopy(x + 8, y, 204, 118, 7, 14); break;
+        case 0: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 156, 118, 7, 14); break;
+        case 1: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 164, 118, 7, 14); break;
+        case 2: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 172, 118, 7, 14); break;
+        case 3: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 180, 118, 7, 14); break;
+        case 4: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 188, 118, 7, 14); break;
+        case 5: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 196, 118, 7, 14); break;
+        case 6: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 204, 118, 7, 14); break;
+        case 7: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 212, 118, 7, 14); break;
+        case 8: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 220, 118, 7, 14); break;
+        case 9: Skin_Copy(x, y, 156, 118, 7, 14); Skin_Copy(x + 8, y, 228, 118, 7, 14); break;
+        case 10: Skin_Copy(x, y, 164, 118, 7, 14); Skin_Copy(x + 8, y, 156, 118, 7, 14); break;
+        case 11: Skin_Copy(x, y, 164, 118, 7, 14); Skin_Copy(x + 8, y, 164, 118, 7, 14); break;
+        case 12: Skin_Copy(x, y, 164, 118, 7, 14); Skin_Copy(x + 8, y, 172, 118, 7, 14); break;
+        case 13: Skin_Copy(x, y, 164, 118, 7, 14); Skin_Copy(x + 8, y, 180, 118, 7, 14); break;
+        case 14: Skin_Copy(x, y, 164, 118, 7, 14); Skin_Copy(x + 8, y, 188, 118, 7, 14); break;
+        case 15: Skin_Copy(x, y, 164, 118, 7, 14); Skin_Copy(x + 8, y, 196, 118, 7, 14); break;
+        case 16: Skin_Copy(x, y, 164, 118, 7, 14); Skin_Copy(x + 8, y, 204, 118, 7, 14); break;
     }
 }
 
 void knob(int x, int y, unsigned char number)
 {
     if(number > 62) number = 62;
-    Skincopy(x, y, number * 25, 147, 24, 24);
+    Skin_Copy(x, y, knobs_pos_table[number].x, knobs_pos_table[number].y, 24, 24);
 }
 
 void Mouse_Right_303_Ed(void)
@@ -1141,9 +1218,9 @@ void Mouse_Sliders_303_Ed(void)
     }
 }
 
-void Skincopy(int xd, int yd, int xs, int ys, int w, int h)
+void Skin_Copy(int xd, int yd, int xs, int ys, int w, int h)
 {
-    Copy(SKIN303, xd, yd, xs, ys, xs + w, ys + h);
+    Copy(GET_SURFACE(SKIN303), xd, yd, xs, ys, xs + w, ys + h);
 }
 
 void tb303_copy_pattern(void)
