@@ -415,7 +415,7 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
     Uint32 Path_Length;
 #endif
 
-#if defined(__USE_OPENGL__)
+#if defined(__USE_OPENGL__) && !defined(__MORPHOS__)
     SDL_putenv("SDL_VIDEO_DRIVER=opengl");
 #endif
 
