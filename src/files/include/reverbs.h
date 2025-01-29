@@ -37,16 +37,27 @@
 #include "files.h"
 #include "files_list.h"
 #include "../../editors/include/editor_reverb.h"
+#if !defined(BZR2)
 #include "../../ui/include/misc_draw.h"
+#endif
 
 // ------------------------------------------------------
 // Functions
-void Load_Reverb_Data(int (*Read_Function)(void *, int ,int, FILE *),
-                      int (*Read_Function_Swap)(void *, int ,int, FILE *),
+#if !defined(BZR2)
+void Load_Reverb_Data(int (*Read_Function)(void *, int, int, FILE *),
+                      int (*Read_Function_Swap)(void *, int, int, FILE *),
                       FILE *in, int New);
-void Save_Reverb_Data(int (*Write_Function)(void *, int ,int, FILE *),
-                      int (*Write_Function_Swap)(void *, int ,int, FILE *),
+void Save_Reverb_Data(int (*Write_Function)(void *, int, int, FILE *),
+                      int (*Write_Function_Swap)(void *, int, int, FILE *),
                       FILE *in);
+#else
+void Load_Reverb_Data(int (*Read_Function)(void *, int, int, CustomFile &),
+                      int (*Read_Function_Swap)(void *, int, int, CustomFile &),
+                      CustomFile &in, int New);
+void Save_Reverb_Data(int (*Write_Function)(void *, int, int, CustomFile &),
+                      int (*Write_Function_Swap)(void *, int, int, CustomFile &),
+                      CustomFile &in);
+#endif
 void Load_Reverb(char *FileName);
 void Save_Reverb(void);
 void Load_Old_Reverb_Presets(int Type);

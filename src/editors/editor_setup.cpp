@@ -52,6 +52,9 @@ extern char Use_Shadows;
 extern int Continuous_Scroll;
 extern int wait_AutoSave;
 extern char Global_Patterns_Font;
+extern int leading_zeroes;
+extern int leading_zeroes_char;
+extern int leading_zeroes_char_row;
 
 extern int metronome_magnify;
 
@@ -114,6 +117,10 @@ void Draw_Master_Ed(void)
     Gui_Draw_Button_Box(520, (Cur_Height - 125), 60, 16, "Keyboard", BUTTON_NORMAL | BUTTON_DISABLED);
     Gui_Draw_Button_Box(520 + (18 + 108) + 2 + 20 + 66, (Cur_Height - 105), 60, 16, "Themes", BUTTON_NO_BORDER | BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
     
+    Gui_Draw_Button_Box(520 + (18 + 108) + 1 + 66, (Cur_Height - 85), 18, 16, "\214", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+    Gui_Draw_Button_Box(520 + (18 + 108) + 1 + 66, (Cur_Height - 65), 18, 16, "\005", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+    Gui_Draw_Button_Box(520 + (18 + 108) + 1 + 66, (Cur_Height - 45), 18, 16, "\006", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+
     Gui_Draw_Button_Box(520 + (18 + 108) + 2 + 20 + 66, (Cur_Height - 85), 18, 16, "1", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
     Gui_Draw_Button_Box(520 + (18 + 108) + 2 + 20 + 66 + 21, (Cur_Height - 85), 18, 16, "2", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
     Gui_Draw_Button_Box(520 + (18 + 108) + 2 + 20 + 66 + 42, (Cur_Height - 85), 18, 16, "3", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
@@ -134,6 +141,8 @@ void Draw_Master_Ed(void)
     Gui_Draw_Button_Box(184, (Cur_Height - 45), 72, 16, "Load Last Ptk", BUTTON_NORMAL | BUTTON_DISABLED);
 
     Gui_Draw_Button_Box(734, (Cur_Height - 125), 42, 16, "Accid.", BUTTON_NORMAL | BUTTON_DISABLED);
+
+    Gui_Draw_Button_Box(205, (Cur_Height - 85), 51, 16, "Lead 0s", BUTTON_NORMAL | BUTTON_DISABLED);
 }
 
 void Actualize_Master_Ed(char gode)
@@ -473,6 +482,22 @@ void Actualize_Master_Ed(char gode)
                 Gui_Draw_Button_Box(258 + 31, (Cur_Height - 45), 29, 16, "Off", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
             }
         }
+
+        // Show leading 0s
+        if(gode == 0 || gode == 26)
+        {
+            if(leading_zeroes)
+            {
+                Gui_Draw_Button_Box(258, (Cur_Height - 85), 29, 16, "On", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
+                Gui_Draw_Button_Box(258 + 31, (Cur_Height - 85), 29, 16, "Off", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+            }
+            else
+            {
+                Gui_Draw_Button_Box(258, (Cur_Height - 85), 29, 16, "On", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+                Gui_Draw_Button_Box(258 + 31, (Cur_Height - 85), 29, 16, "Off", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
+            }
+        }
+        
         // There was a palette change
         if(RefreshTex)
         {
@@ -720,6 +745,33 @@ void Mouse_Left_Master_Ed(void)
             teac = 10;
         }
 
+        // Negate the palette
+        if(Check_Mouse(520 + (18 + 108) +1 + 66, (Cur_Height - 85), 18, 16))
+        {
+            Negate_Palette();
+            Get_Phony_Palette();
+            gui_action = GUI_CMD_UPDATE_SETUP_ED;
+            teac = 10;
+        }
+
+        // Rotate the palette components to the left
+        if(Check_Mouse(520 + (18 + 108) +1 + 66, (Cur_Height - 65), 18, 16))
+        {
+            Rotate_Palette_Left();
+            Get_Phony_Palette();
+            gui_action = GUI_CMD_UPDATE_SETUP_ED;
+            teac = 10;
+        }
+
+        // Rotate the palette components to the right
+        if(Check_Mouse(520 + (18 + 108) +1 + 66, (Cur_Height - 45), 18, 16))
+        {
+            Rotate_Palette_Right();
+            Get_Phony_Palette();
+            gui_action = GUI_CMD_UPDATE_SETUP_ED;
+            teac = 10;
+        }
+
         // set default palette 1
         if(Check_Mouse(520 + (18 + 108) + 2 + 20 + 66, (Cur_Height - 85), 18, 16))
         {
@@ -906,6 +958,28 @@ void Mouse_Left_Master_Ed(void)
             AutoBackup = FALSE;
             teac = 23;
             gui_action = GUI_CMD_UPDATE_SETUP_ED;
+        }
+
+        // Leading 0s on
+        if(Check_Mouse(258, (Cur_Height - 85), 29, 16))
+        {
+            leading_zeroes = TRUE;
+            leading_zeroes_char = 0;
+            leading_zeroes_char_row = 0;
+            teac = 26;
+            gui_action = GUI_CMD_UPDATE_SETUP_ED;
+            Update_Pattern(0);
+        }
+
+        // Leading 0s off
+        if(Check_Mouse(258 + 31, (Cur_Height - 85), 29, 16))
+        {
+            leading_zeroes = FALSE;
+            leading_zeroes_char = 21;
+            leading_zeroes_char_row = 20;
+            teac = 26;
+            gui_action = GUI_CMD_UPDATE_SETUP_ED;
+            Update_Pattern(0);
         }
 
         // Splash Screen on

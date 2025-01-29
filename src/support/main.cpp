@@ -104,6 +104,8 @@ int Startup_Height;
 int Resize_Width;
 int Resize_Height;
 int Burn_Title = FALSE;
+int global_argc;
+char global_argv[MAX_PATH];
 
 SDL_sem *thread_sema;
 SDL_Surface *Main_Screen;
@@ -152,6 +154,12 @@ extern char SplashScreen;
 char Last_Used_Ptk[MAX_PATH];
 
 SDL_Event Events[MAX_EVENTS];
+
+extern int Enter_Notification;
+extern int Enter_Notified;
+extern int Enter_Notified_Play_Pattern;
+extern int RShift_Notification;
+extern int RShift_Notified;
 
 int Nbr_Keyboards;
 int Keyboard_Idx;
@@ -690,18 +698,13 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
     }
 #endif
 
+    global_argc = argc;
+
     // Check if there's an argument
+    global_argv[0] = 0;
     if(argc != 1)
     {
-        Load_File(0, argv[1]);
-    }
-    else
-    {
-        // Nope: check if auto reload was turned on
-        if(AutoReload)
-        {
-            Load_File(0, Last_Used_Ptk);
-        }
+        strcpy(global_argv, argv[1]);
     }
 
     Resize_Width = Cur_Width;
@@ -790,6 +793,26 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
                                     }
                                 }
                             }
+
+                            if((Keys[SDLK_RETURN] || Keys[SDLK_KP_ENTER]) && Enter_Notification == FALSE &&
+                                !Get_LAlt() && !Get_RAlt() && !Get_LCtrl() && !Get_RCtrl()
+                               )
+                            {
+                                Enter_Notification = TRUE;
+                                Enter_Notified = TRUE;
+                                Enter_Notified_Play_Pattern = TRUE;
+                                if(Get_LShift())
+                                {
+                                    Enter_Notified_Play_Pattern = FALSE;
+                                }
+                            }
+
+                            RShift_Notification = FALSE;
+                            if(Get_RShift())
+                            {
+                                RShift_Notification = TRUE;
+                                RShift_Notified = TRUE;
+                            }
                         }
                     }
 
@@ -800,7 +823,7 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
 
                     if(SDL_GetModState() & KMOD_LALT)
                     {
-                        if(Keys[SDLK_RETURN])
+                        if(Keys[SDLK_RETURN] && !Get_LCtrl() && !Get_RCtrl())
                         {
                             FullScreen ^= TRUE;
                             Switch_FullScreen(Cur_Width, Cur_Height, TRUE, FullScreen ? FALSE : TRUE);
@@ -843,6 +866,28 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
                                     Send_Note(Scancode | 0x80, FALSE, TRUE);
                                 }
                             }
+                        }
+                        
+                        if(Keys[SDLK_RETURN] || Keys[SDLK_KP_ENTER] || Get_LAlt() || Get_RAlt() || Get_LCtrl() || Get_RCtrl())
+                        {
+                        }
+                        else
+                        {
+                            if(Enter_Notification)
+                            {
+                                Enter_Notification = FALSE;
+                                Enter_Notified = TRUE;
+                            }
+                        }
+                            
+                        if(Get_RShift())
+                        {
+                            RShift_Notification = TRUE;
+                        }
+                        else
+                        {
+                            RShift_Notification = FALSE;
+                            RShift_Notified = TRUE;
                         }
                     }
                     break;
@@ -972,48 +1017,10 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
             do_resize = FALSE;
         }
 
-#if defined(__USE_OPENGL__)
-        Enter_2D_Mode(Cur_Width, Cur_Height);
-#endif
-
-        if(!Screen_Update())
+        if(!Redraw_Screen())
         {
             break;
         }
-
-#if !defined(__USE_OPENGL__)
-        // Flush all pending blits
-        if(Nbr_Update_Rects)
-        {
-           SDL_UpdateRects(Main_Screen, Nbr_Update_Rects, Update_Stack);
-        }
-        Nbr_Update_Rects = 0;
-#endif
-
-        // Display the title requester once
-        if(!Burn_Title && SplashScreen)
-        {
-            Display_Requester(&Title_Requester, GUI_CMD_REFRESH_PALETTE, NULL, TRUE);
-            Burn_Title = TRUE;
-        }
-        if(!Burn_Title && !SplashScreen)
-        {
-            Burn_Title = TRUE;
-            Kill_Requester();
-        }
-
-#if defined(__USE_OPENGL__)
-        Leave_2d_Mode();
-#if !defined(__WIN32__)
-        glDrawBuffer(GL_FRONT);
-        glRasterPos2f(-1.0f, -1.0f);
-        glCopyPixels(0, 0, Cur_Width, Cur_Height, GL_COLOR);
-        glDrawBuffer(GL_BACK);
-        glFinish();
-#else
-        SDL_GL_SwapBuffers();
-#endif
-#endif
 
 #if defined(__AMIGAOS4__) || defined(__AROS__) || defined(__MORPHOS__)
         SDL_Delay(delay_ms);
@@ -1045,6 +1052,94 @@ extern SDL_NEED int SDL_main(int argc, char *argv[])
 void Message_Error(char *Message)
 {
     printf("Error: %s\n", Message);
+}
+
+// ------------------------------------------------------
+// Redraw the screen
+int Redraw_Screen(void)
+{
+
+#if defined(__USE_OPENGL__)
+        Enter_2D_Mode(Cur_Width, Cur_Height);
+#endif
+
+        if(!Screen_Update())
+        {
+            return FALSE;
+        }
+
+#if !defined(__USE_OPENGL__)
+        // Flush all pending blits
+        if(Nbr_Update_Rects)
+        {
+           SDL_UpdateRects(Main_Screen, Nbr_Update_Rects, Update_Stack);
+        }
+        Nbr_Update_Rects = 0;
+#endif
+
+        // Display the title requester once
+        if(!Burn_Title && SplashScreen)
+        {
+            Display_Requester(&Title_Requester, GUI_CMD_REFRESH_PALETTE, NULL, TRUE);
+            Burn_Title = TRUE;
+        }
+        if(!Burn_Title && !SplashScreen)
+        {
+            Burn_Title = TRUE;
+            Kill_Requester();
+        }
+
+#if defined(__USE_OPENGL__)
+        Leave_2d_Mode();
+
+#if !defined(__WIN32__) && !defined(__AROS__)
+        glDrawBuffer(GL_FRONT);
+        glRasterPos2f(-1.0f, -1.0f);
+        glCopyPixels(0, 0, Cur_Width, Cur_Height, GL_COLOR);
+        glDrawBuffer(GL_BACK);
+        glFinish();
+#else
+        SDL_GL_SwapBuffers();
+#endif
+
+#endif
+
+    return TRUE;
+}
+
+// ------------------------------------------------------
+// Redraw the screen quickly (this is used to update the status box)
+void Redraw_Screen_Quick(void)
+{
+
+#if !defined(__USE_OPENGL__)
+        // Flush all pending blits
+        if(Nbr_Update_Rects)
+        {
+           SDL_UpdateRects(Main_Screen, Nbr_Update_Rects, Update_Stack);
+        }
+        Nbr_Update_Rects = 0;
+#endif
+
+#if defined(__USE_OPENGL__)
+        Leave_2d_Mode();
+
+#if !defined(__WIN32__) && !defined(__AROS__) && !defined(__AMIGAOS4__)
+        glDrawBuffer(GL_FRONT);
+        glRasterPos2f(-1.0f, -1.0f);
+        glCopyPixels(0, 0, Cur_Width, Cur_Height, GL_COLOR);
+        glDrawBuffer(GL_BACK);
+        glFinish();
+#else
+        SDL_GL_SwapBuffers();
+#endif
+
+#endif
+
+#if defined(__USE_OPENGL__)
+        Enter_2D_Mode(Cur_Width, Cur_Height);
+#endif
+
 }
 
 // ------------------------------------------------------
@@ -1085,7 +1180,7 @@ int Switch_FullScreen(int Width, int Height, int Refresh, int Force_Window_Mode)
     }
 #endif
 
-#if defined(__LINUX__) || defined(__MACOSX_PPC__) || defined(__MACOSX_X86__) || defined(__WIN32__)
+#if defined(__LINUX__) || defined(__MACOSX_PPC__) || defined(__MACOSX_X86__) || defined(__WIN32__) || defined(__AROS__)
     Real_FullScreen = SDL_FULLSCREEN;
 #endif
 

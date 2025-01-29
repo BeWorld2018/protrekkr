@@ -37,9 +37,11 @@
 #if defined(__GCC__)
 #include "../../include/variables.h"
 #include "../../ui/include/misc_draw.h"
-#else
+#elif !defined(BZR2)
 #include "../include/variables.h"
 #include "../ui/include/misc_draw.h"
+#else
+#include "../include/variables.h"
 #endif
 
 // ------------------------------------------------------
@@ -60,5 +62,6 @@ void Actualize_Sequencer(void);
 void Seq_Bound_Pattern(int posil);
 void Toggle_Track_On_Off_Status(int posindex, int seqindex);
 void Solo_Track_On_Off(int posindex, int seqindex);
+void Display_Seq_Edit_Buttons(void);
 
 #endif

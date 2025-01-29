@@ -37,7 +37,7 @@
 // Constants
 // This is a nasty hack: we should have a specific ASCII buffer
 // instead of using the unicode one.
-#if !defined(__MACOSX_PPC__)
+#if !defined(__MACOSX_PPC__) && !defined(__MACOSX_X86__)
 #define UNICODE_OFFSET1 0x20
 #define UNICODE_OFFSET2 0x60
 #else
@@ -68,6 +68,13 @@ extern int Delay_Sound_Buffer;
 extern int Cur_Delay_Sound_Buffer;
 extern int Subicounter;
 extern int pattern_double;
+extern int pattern_sliders;
+extern int pattern_sliders_numbers;
+extern int RShift_Notification;
+extern int RShift_Notified;
+int Enter_Notification;
+int Enter_Notified;
+int Enter_Notified_Play_Pattern;
 
 #if defined(PTK_SHUFFLE)
 extern int shufflestep;
@@ -85,6 +92,15 @@ unsigned char sl3 = 0;
 extern int pos_scope;
 extern int pos_scope_latency;
 
+int can_modify_song = 0;
+
+int file_loaded = FALSE;
+int Burned_Title = FALSE;
+extern int global_argc;
+extern char global_argv[MAX_PATH];
+extern char AutoReload;
+extern char Last_Used_Ptk[MAX_PATH];
+
 #if defined(__USE_OPENGL__)
 extern unsigned int *RGBTexture;
 #endif
@@ -99,7 +115,6 @@ int CONSOLE_HEIGHT2;
 int fluzy = -1;
 int Scopish = SCOPE_ZONE_MOD_DIR;
 char Scopish_LeftRight = FALSE;
-int rev_counter2 = 0;
 char Visible_Columns = 0;
 int rs_coef = 32768;
 
@@ -192,6 +207,8 @@ SDL_Surface *FONT_LOW;
 SDL_TimerID Timer;
 Uint32 Timer_CallBack(Uint32 interval, void *param);
 Uint32 (*Timer_Ptr)(Uint32 interval, void *param) = &Timer_CallBack;
+extern int Status_Box_Wait;
+extern int Status_Box_Wait_Done;
 
 extern s_access sp_Position[MAX_TRACKS][MAX_POLYPHONY];
 
@@ -226,6 +243,7 @@ void Draw_Scope(void);
 void Draw_Scope_Files_Button(void);
 void Display_Tracks_To_Render(void);
 void Solo_Track(int track_to_solo);
+void Display_RShift_Status(void);
 
 JAZZ_KEY Sub_Channels_Jazz[MAX_TRACKS][MAX_POLYPHONY];
 
@@ -476,7 +494,7 @@ SDL_Surface *Load_Skin_Picture(char *name)
 
 // ------------------------------------------------------
 // Load the font letters sizes according
-int Load_Font_Datas(char *name)
+int Load_Font_Data(char *name)
 {
     char filepath[MAX_PATH];
     char error[256];
@@ -486,7 +504,7 @@ int Load_Font_Datas(char *name)
 #else
     sprintf(filepath, "skins/%s", name);
 #endif
-    if(!Create_Font_Datas(filepath))
+    if(!Create_Font_Data(filepath))
     {
         sprintf(error, "Can't load %s file.", name);
         Message_Error(error);
@@ -496,7 +514,7 @@ int Load_Font_Datas(char *name)
 }
 
 // ------------------------------------------------------
-// Load the necessary datas and initialize the interface
+// Load the necessary data and initialize the interface
 int Init_Context(void)
 {
     srand(time(0));
@@ -575,7 +593,7 @@ int Init_Context(void)
     FONT_LOW = Load_Skin_Picture("font.bmp");
     if(!FONT_LOW) return(FALSE);
 
-    if(!Load_Font_Datas("font_datas.txt"))
+    if(!Load_Font_Data("font_data.txt"))
     {
         return(FALSE);
     }
@@ -683,6 +701,29 @@ int Screen_Update(void)
 #if defined(__MACOSX_PPC__)
     FSRef soundFileRef;
 #endif
+
+    if(Burned_Title && !file_loaded)
+    {
+        if(global_argc != 1)
+        {
+            Load_File(0, global_argv);
+        }
+        else
+        {
+            // Nope: check if auto reload was turned on
+            if(AutoReload)
+            {
+                Load_File(0, Last_Used_Ptk);
+            }
+        }
+        file_loaded = TRUE;
+    }
+
+    if(Status_Box_Wait_Done == 1)
+    {
+        Status_Box("Feeling Groovy...", TRUE);
+        Status_Box_Wait_Done = 2;
+    }
 
     redraw_everything = FALSE;
     if(Env_Change)
@@ -959,7 +1000,7 @@ int Screen_Update(void)
             Actualize_Sequencer();
         }
 
-        if(gui_action == GUI_CMD_SWITCH_TRACK_STATUS)
+        if(gui_action == GUI_CMD_SWITCH_TRACK_STATUS && can_modify_song)
         {
             Toggle_Track_On_Off_Status(Ext_Pos_Switch, Ext_Track_Switch);
             Actualize_Sequencer();
@@ -1213,7 +1254,7 @@ int Screen_Update(void)
             is_recording = 0;
             is_recording_2 = 0;
             Nbr_Sub_NoteOff = 0;
-            is_editing = 0;
+            is_editing = FALSE;
             Notify_Edit();
             Song_Stop();
         }
@@ -1226,7 +1267,7 @@ int Screen_Update(void)
         if(gui_action == GUI_CMD_EDIT_MODE)
         {
             is_recording = 0;
-            is_editing ^= 1;
+            is_editing ^= TRUE;
             is_recording_2 = 0;
             Nbr_Sub_NoteOff = 0;
             Song_Stop();
@@ -1240,7 +1281,7 @@ int Screen_Update(void)
             is_recording ^= 1;
             is_recording_2 = 0;
             Nbr_Sub_NoteOff = 0;
-            is_editing = 0;
+            is_editing = FALSE;
             key_record_first_time = TRUE;
             Clear_Midi_Channels_Pool();
             Update_Pattern(0);
@@ -1477,15 +1518,15 @@ int Screen_Update(void)
             switch(gui_action)
             {
                 case GUI_CMD_EXPORT_SEL_WAV:
-                    Status_Box("Writing Wav Header And Selected Sample Data Range...");
+                    Status_Box("Writing Wav Header And Selected Sample Data Range...", TRUE);
                     break;
 
                 case GUI_CMD_EXPORT_WHOLE_WAV:
-                    Status_Box("Writing Wav Header And Whole Sample Data...");
+                    Status_Box("Writing Wav Header And Whole Sample Data...", TRUE);
                     break;
 
                 case GUI_CMD_EXPORT_LOOP_WAV:
-                    Status_Box("Writing Wav Header And Sample Data Loop...");
+                    Status_Box("Writing Wav Header And Sample Data Loop...", TRUE);
                     break;
             }
 
@@ -1551,39 +1592,39 @@ int Screen_Update(void)
                 if(LoopType[Current_Instrument][Current_Instrument_Split])
                 {
                     RiffChunkHeader header;
-                    WaveSmpl_ChunkData datas;
+                    WaveSmpl_ChunkData data;
 
                     header.ckID = FourCC("smpl");
                     header.ckSize = 0x3c;
 
-                    memset(&datas, 0, sizeof(datas));
-                    datas.Num_Sample_Loops = 1;
+                    memset(&data, 0, sizeof(data));
+                    data.Num_Sample_Loops = 1;
                     if(gui_action == GUI_CMD_EXPORT_LOOP_WAV)
                     {
                         // Whole sample is the loop
-                        datas.Start = 0;
-                        datas.End = wend;
+                        data.Start = 0;
+                        data.End = wend;
                     }
                     else
                     {
-                        datas.Start = LoopStart[Current_Instrument][Current_Instrument_Split];
-                        datas.End = LoopEnd[Current_Instrument][Current_Instrument_Split];
+                        data.Start = LoopStart[Current_Instrument][Current_Instrument_Split];
+                        data.End = LoopEnd[Current_Instrument][Current_Instrument_Split];
                     }
 
                     header.ckSize = Swap_32(header.ckSize);
 
-                    datas.Num_Sample_Loops = Swap_32(datas.Num_Sample_Loops);
-                    datas.Start = Swap_32(datas.Start);
-                    datas.End = Swap_32(datas.End);
+                    data.Num_Sample_Loops = Swap_32(data.Num_Sample_Loops);
+                    data.Start = Swap_32(data.Start);
+                    data.End = Swap_32(data.End);
 
                     RF.WriteData((void *) &header, sizeof(header));
-                    RF.WriteData((void *) &datas, sizeof(datas));
+                    RF.WriteData((void *) &data, sizeof(data));
                 }
             }
             RF.Close();
             if(strlen(SampleName[Current_Instrument][Current_Instrument_Split])) sprintf(buffer, "File '%s' Saved.", SampleName[Current_Instrument][Current_Instrument_Split]);
             else sprintf(buffer, "File 'Untitled.wav' Saved.");
-            Status_Box(buffer);
+            Status_Box(buffer, TRUE);
 
             Read_SMPT();
             last_index = -1;
@@ -1732,12 +1773,12 @@ int Screen_Update(void)
 
         if(gui_action == GUI_CMD_MIDI_NOTE_OFF_1_TRACK)
         {
-            Status_Box("Notes Off Command Sent To This Track.");
+            Status_Box("Notes Off Command Sent To This Track.", TRUE);
         }
 
         if(gui_action == GUI_CMD_MIDI_NOTE_OFF_ALL_TRACKS)
         {
-            Status_Box("Notes Off Command Sent To All Tracks.");
+            Status_Box("Notes Off Command Sent To All Tracks.", TRUE);
         }
 
         if(gui_action == GUI_CMD_UPDATE_TRACK_FX_ED)
@@ -1771,6 +1812,22 @@ int Screen_Update(void)
         if(gui_action == GUI_CMD_UPDATE_PATTERN_ED)
         {
             Actualize_Pattern_Ed();
+        }
+
+        if(gui_action == GUI_CMD_GOTO_START_POSITION)
+        {
+            Song_Position = .0;
+            Bound_Patt_Pos();
+            Actualize_Sequencer();
+            Update_Pattern(0);
+        }
+
+        if(gui_action == GUI_CMD_GOTO_END_POSITION)
+        {
+            Song_Position = Song_Length - 1;
+            Bound_Patt_Pos();
+            Actualize_Sequencer();
+            Update_Pattern(0);
         }
 
         if(gui_action == GUI_CMD_REDUCE_POSITIONS_10)
@@ -1836,7 +1893,7 @@ int Screen_Update(void)
 
         if(gui_action == GUI_CMD_PATTERNS_POOL_EXHAUSTED)
         {
-            Status_Box("Maximum Number Of Patterns Reached.");
+            Status_Box("Maximum Number Of Patterns Reached.", TRUE);
         }
 
         if(gui_action == GUI_CMD_REFRESH_SAMPLE_ED)
@@ -1870,12 +1927,12 @@ int Screen_Update(void)
 
         if(!Done_Tip)
         {
-            Status_Box(tipoftheday);
+            Status_Box(tipoftheday, FALSE);
             Done_Tip = TRUE;
         }
         else
         {
-            Status_Box("Feeling Groovy.");
+            Status_Box(NULL, FALSE);
         }
 
         Gui_Draw_Button_Box(0, 6, 16, 16, "\011", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
@@ -1888,7 +1945,6 @@ int Screen_Update(void)
         Gui_Draw_Button_Box(8, 46, 80, 16, "\254", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
         Notify_Play();
         Start_Rec();
-        Notify_Edit();
 
         Gui_Draw_Button_Box(98, 24, 156, 78, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(106, 28, 80, 16, "Position", BUTTON_NORMAL | BUTTON_DISABLED);
@@ -1899,15 +1955,15 @@ int Screen_Update(void)
         Gui_Draw_Button_Box(256, 24, 136, 78, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
 
         Gui_Draw_Button_Box(262, 28, 38, 16, "Tracks", BUTTON_NORMAL | BUTTON_DISABLED);
-        Gui_Draw_Button_Box(302, 28, 9, 16, I_, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_SMALL_FONT);
-        Gui_Draw_Button_Box(313, 28, 9, 16, D_, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_SMALL_FONT);
+
         Gui_Draw_Button_Box(262, 46, 60, 16, "Beats/Min.", BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(262, 64, 60, 16, "Ticks/Beat", BUTTON_NORMAL | BUTTON_DISABLED);
         Display_Beat_Time();
+        Notify_Edit();
 
         Gui_Draw_Button_Box(0, 104, 392, 42, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(8, 108, 80, 16, "Instrument", BUTTON_NORMAL | BUTTON_DISABLED);
-        Gui_Draw_Button_Box(320, 108, 64, 16, "Delete", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+        Gui_Draw_Button_Box(320, 108, 28, 16, "Del", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
         Gui_Draw_Button_Box(8, 126, 80, 16, "Step Add", BUTTON_NORMAL | BUTTON_DISABLED);
         Gui_Draw_Button_Box(166, 126, 90, 16, "Keyboard Octave", BUTTON_NORMAL | BUTTON_DISABLED);
 
@@ -1974,6 +2030,12 @@ int Screen_Update(void)
                 Actualize_Fx_Ed(9);
                 Actualize_Fx_Ed(14);
                 gui_action_external &= ~GUI_UPDATE_EXTERNAL_REVERB_FILTER;
+            }
+
+            if(gui_action_external & GUI_UPDATE_EXTERNAL_REVERB_DAMP)
+            {
+                Actualize_Fx_Ed(15);
+                gui_action_external &= ~GUI_UPDATE_EXTERNAL_REVERB_DAMP;
             }
 
             if(gui_action_external & GUI_UPDATE_EXTERNAL_COMPRESSOR)
@@ -2139,6 +2201,8 @@ int Screen_Update(void)
         Keyboard_Handler_Requester();
     }
 
+    Display_RShift_Status();
+
     // Refresh the sequencer each time the song position is different
     if(Song_Playing)
     {
@@ -2224,7 +2288,7 @@ int Screen_Update(void)
     if(Check_Requester(&Exit_Requester) == 1)
     {
         Song_Stop();
-        Status_Box("Seppuku...");
+        Status_Box("Seppuku...", FALSE);
         return(FALSE);
     }
 
@@ -2370,7 +2434,9 @@ void Load_File(int Freeindex, const char *str)
                 strcmp(extension, "PROTREKO") == 0 ||
                 strcmp(extension, "PROTREKP") == 0 ||
                 strcmp(extension, "PROTREKQ") == 0 ||
-                strcmp(extension, "PROTREKR") == 0)
+                strcmp(extension, "PROTREKR") == 0 ||
+                strcmp(extension, "PROTREKS") == 0 ||
+                strcmp(extension, "PROTREKT") == 0)
         {
             sprintf(name, "%s", FileName);
             Song_Stop();
@@ -2432,7 +2498,7 @@ void Load_File(int Freeindex, const char *str)
                (extension_AIFF[0] == FormID &&
                 extension_AIFF[2] == AifcID))
             {
-                Status_Box("Attempting To Load An Audio IFF File...");
+                Status_Box("Attempting To Load An Audio IFF File...", TRUE);
                 if(AIFF_File.Open(FileName))
                 {
                     int bits = AIFF_File.BitsPerSample();
@@ -2440,7 +2506,7 @@ void Load_File(int Freeindex, const char *str)
 
                     if(channels != 1 && channels != 2)
                     {
-                        Status_Box(TITLE " Can Only Load Mono Or Stereo Samples.");
+                        Status_Box(TITLE " Can Only Load Mono Or Stereo Samples.", TRUE);
                     }
                     else
                     {
@@ -2451,7 +2517,7 @@ void Load_File(int Freeindex, const char *str)
                            bits != 32 &&
                            bits != 64)
                         {
-                            Status_Box(TITLE " Can Only Load 8, 12, 16, 24, 32 Or 64 Bit Samples.");
+                            Status_Box(TITLE " Can Only Load 8, 12, 16, 24, 32 Or 64 Bit Samples.", TRUE);
                         }
                         else
                         {
@@ -2509,22 +2575,22 @@ void Load_File(int Freeindex, const char *str)
                             switch(bits)
                             {
                                 case 64:
-                                    Status_Box("64 Bit Audio IFF PCM Converted Into 16 Bit Format.");
+                                    Status_Box("64 Bit Audio IFF PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 case 32:
-                                    Status_Box("32 Bit Audio IFF PCM Converted Into 16 Bit Format.");
+                                    Status_Box("32 Bit Audio IFF PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 case 24:
-                                    Status_Box("24 Bit Audio IFF PCM Converted Into 16 Bit Format.");
+                                    Status_Box("24 Bit Audio IFF PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 case 12:
-                                    Status_Box("12 Bit Audio IFF PCM Converted Into 16 Bit Format.");
+                                    Status_Box("12 Bit Audio IFF PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 case 8:
-                                    Status_Box("8 Bit Audio IFF PCM Converted Into 16 Bit Format.");
+                                    Status_Box("8 Bit Audio IFF PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 default:
-                                    Status_Box("16 Bit Audio IFF PCM Loaded.");
+                                    Status_Box("16 Bit Audio IFF PCM Loaded.", TRUE);
                                     break;
                             }
                             Unlock_Audio_Thread();
@@ -2535,12 +2601,12 @@ void Load_File(int Freeindex, const char *str)
                 }
                 else
                 {
-                    Status_Box("Corrupted Or Unsupported Audio IFF File.");
+                    Status_Box("Corrupted Or Unsupported Audio IFF File.", TRUE);
                 }
             }
             else
             {
-                Status_Box("Attempting to Load A RIFF File...");
+                Status_Box("Attempting to Load A RIFF File...", TRUE);
 
                 // We need the length
                 if(Wav_File.OpenForRead(FileName) == DDC_SUCCESS)
@@ -2549,7 +2615,7 @@ void Load_File(int Freeindex, const char *str)
                     int channels = Wav_File.NumChannels();
                     if(channels != 1 && channels != 2)
                     {
-                        Status_Box(TITLE " Can Only Load Mono Or Stereo Samples.");
+                        Status_Box(TITLE " Can Only Load Mono Or Stereo Samples.", TRUE);
                     }
                     else
                     {
@@ -2560,7 +2626,7 @@ void Load_File(int Freeindex, const char *str)
                            bits != 32 &&
                            bits != 64)
                         {
-                            Status_Box(TITLE " Can Only Load 8, 12, 16, 24, 32 Or 64 Bit Samples.");
+                            Status_Box(TITLE " Can Only Load 8, 12, 16, 24, 32 Or 64 Bit Samples.", TRUE);
                         }
                         else
                         {
@@ -2613,22 +2679,22 @@ void Load_File(int Freeindex, const char *str)
                             switch(bits)
                             {
                                 case 64:
-                                    Status_Box("64 Bit WAV PCM Converted Into 16 Bit Format.");
+                                    Status_Box("64 Bit WAV PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 case 32:
-                                    Status_Box("32 Bit WAV PCM Converted Into 16 Bit Format.");
+                                    Status_Box("32 Bit WAV PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 case 24:
-                                    Status_Box("24 Bit WAV PCM Converted Into 16 Bit Format.");
+                                    Status_Box("24 Bit WAV PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 case 12:
-                                    Status_Box("12 Bit WAV PCM Converted Into 16 Bit Format.");
+                                    Status_Box("12 Bit WAV PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 case 8:
-                                    Status_Box("8 Bit WAV PCM Converted Into 16 Bit Format.");
+                                    Status_Box("8 Bit WAV PCM Converted Into 16 Bit Format.", TRUE);
                                     break;
                                 default:
-                                    Status_Box("16 Bit WAV PCM Loaded.");
+                                    Status_Box("16 Bit WAV PCM Loaded.", TRUE);
                                     break;
                             }
                             Unlock_Audio_Thread();
@@ -2639,15 +2705,16 @@ void Load_File(int Freeindex, const char *str)
                 }
                 else
                 {
-                    Status_Box("Invalid File Format. I Only Accept '.wav' '.aiff' '.aifc' '.ptk' '.pti' '.303' '.pts' '.ppb' '.prv' '.mod' '.dbm' Or '.ft' Files.");
+                    Status_Box("Invalid File Format. I Only Accept '.wav' '.aiff' '.aifc' '.ptk' '.pti' '.303' '.pts' '.ppb' '.prv' '.mod' '.dbm' Or '.ft' Files.", TRUE);
                 }
             }
         }
         fclose(in);
+        Status_Box("File Loaded Successfully.", TRUE);
     }
     else
     {
-        Status_Box("File Loading Error. (Possible Cause: File Not Found)");
+        Status_Box("File Loading Error. (Possible Cause: File Not Found)", TRUE);
     }
     gui_action = GUI_CMD_NONE;
     Actualize_DiskIO_Ed(0);
@@ -2680,6 +2747,9 @@ int Get_Free_Wave(void)
 void Song_Play(void)
 {
     Ptk_Stop();
+    SubCounter = 0;
+    PosInTick = 0;
+    PosInTick_Delay = 0;
     liveparam = 0;
     livevalue = 0;
     player_pos = -1;
@@ -2718,17 +2788,31 @@ void Notify_Edit(void)
         Gui_Draw_Button_Box(8, 82, 62, 16, "Edit/Rec.", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
     }
     Gui_Draw_Button_Box(72, 82, 16, 16, NULL, BUTTON_DISABLED);
+    Switch_Cmd_Playing();
+    Actualize_Sequencer();
     gui_action_metronome = GUI_CMD_FLASH_METRONOME_OFF;
 }
 
 // ------------------------------------------------------
 // Switch the command that can't be modified during playing
-void Switch_Cmd_Playing(int Enable)
+void Switch_Cmd_Playing(void)
 {
-    Gui_Draw_Button_Box(302, 28, 9, 16, I_, BUTTON_NORMAL | (Enable ? 0 : BUTTON_DISABLED) | BUTTON_TEXT_CENTERED | BUTTON_SMALL_FONT);
-    Gui_Draw_Button_Box(313, 28, 9, 16, D_, BUTTON_NORMAL | (Enable ? 0 : BUTTON_DISABLED) | BUTTON_TEXT_CENTERED | BUTTON_SMALL_FONT);
-    Gui_Draw_Arrows_Number_Box(324, 46, Beats_Per_Min, BUTTON_NORMAL | (Enable ? 0 : BUTTON_DISABLED) | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
-    Gui_Draw_Arrows_Number_Box2(324, 64, Ticks_Per_Beat, BUTTON_NORMAL | (Enable ? 0 : BUTTON_DISABLED) | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
+    can_modify_song = 0;
+    if(is_editing)
+    {
+        can_modify_song = BUTTON_DISABLED;
+        if(is_recording)
+        {
+            can_modify_song = 0;
+        }
+    }
+
+    Gui_Draw_Button_Box(302, 28, 9, 16, I_, BUTTON_NORMAL | (can_modify_song ^ BUTTON_DISABLED) | BUTTON_TEXT_CENTERED | BUTTON_SMALL_FONT);
+    Gui_Draw_Button_Box(313, 28, 9, 16, D_, BUTTON_NORMAL | (can_modify_song ^ BUTTON_DISABLED) | BUTTON_TEXT_CENTERED | BUTTON_SMALL_FONT);
+    Gui_Draw_Arrows_Number_Box(324, 46, Beats_Per_Min, BUTTON_NORMAL | (!Song_Playing ? 0 : BUTTON_DISABLED) | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
+    Gui_Draw_Arrows_Number_Box2(324, 64, Ticks_Per_Beat, BUTTON_NORMAL | (!Song_Playing ? 0 : BUTTON_DISABLED) | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
+    Gui_Draw_Arrows_Number_Box2(324, 28, Song_Tracks, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE | (can_modify_song ^ BUTTON_DISABLED));
+    Gui_Draw_Arrows_Number_Box2(324, 28, Song_Tracks, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE | (can_modify_song ^ BUTTON_DISABLED));
 }
             
 // ------------------------------------------------------
@@ -2737,19 +2821,19 @@ void Notify_Play(void)
 {
     if(Song_Playing)
     {
-        if(plx == 0)
+        if(!play_pattern)
         {
-            Gui_Draw_Button_Box(49, 28, 39, 16, "\253", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
             Gui_Draw_Button_Box(8, 28, 39, 16, "\04", BUTTON_PUSHED | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
-            Switch_Cmd_Playing(FALSE);
-            Status_Box("Playing Song...");
+            Gui_Draw_Button_Box(49, 28, 39, 16, "\253", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
+            Switch_Cmd_Playing();
+            Status_Box("Playing Song...", TRUE);
         }
         else
         {
             Gui_Draw_Button_Box(8, 28, 39, 16, "\04", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
             Gui_Draw_Button_Box(49, 28, 39, 16, "\253", BUTTON_PUSHED | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
-            Switch_Cmd_Playing(FALSE);
-            Status_Box("Playing Pattern...");
+            Switch_Cmd_Playing();
+            Status_Box("Playing Pattern...", TRUE);
         }
     }
     else
@@ -2766,7 +2850,7 @@ void Song_Stop(void)
     Ptk_Stop();
     Gui_Draw_Button_Box(8, 28, 39, 16, "\04", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
     Gui_Draw_Button_Box(49, 28, 39, 16, "\253", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
-    Status_Box("Feeling Groovy.");
+    Status_Box("Feeling Groovy.", TRUE);
     // Make sure the visuals stay
     Song_Position = Song_Position_Visual;
     Pattern_Line = Pattern_Line_Visual;
@@ -2897,7 +2981,8 @@ void New_Mod(void)
         mas_vol = 1.0f;
         Reverb_Filter_Cutoff = 0.08f;
         Reverb_Filter_Resonance = 0.5f;
-        Reverb_Stereo_Amount = 50;
+        Reverb_Stereo_Amount = 63;
+        Reverb_Damp = 1.0f;
 
         for(i = 0; i < MAX_TRACKS; i++)
         {
@@ -2941,7 +3026,7 @@ void New_Mod(void)
 
     Draw_Scope();
 
-    Status_Box("Zzaapp Done.");
+    Status_Box("Zzaapp Done.", TRUE);
 
     Refresh_UI_Context();
 
@@ -3103,7 +3188,7 @@ int Must_Render_Track(int Idx)
 
 void Wav_Renderizer()
 {
-    plx = 0;
+    play_pattern = FALSE;
     char buffer[MAX_PATH];
     char buffer_name[MAX_PATH];
     int Save_Chan_Mute_State[MAX_TRACKS];
@@ -3160,7 +3245,7 @@ void Wav_Renderizer()
                     if(RF[j].OpenForWrite(buffer_name, 44100, rawrender_32float ? 32 : 16, 2) != DDC_SUCCESS)
                     {
                         sprintf(buffer, "Can't Open '%s' File.", buffer_name);
-                        Status_Box(buffer);
+                        Status_Box(buffer, TRUE);
                         return;
                     }
                     if(rawrender_range)
@@ -3189,9 +3274,7 @@ void Wav_Renderizer()
                     }
                     break;
             }
-            Status_Box(buffer);
-            SDL_UpdateRect(Main_Screen, 0, 0, 0, 0);
-            SDL_Delay(10);
+            Status_Box(buffer, TRUE);
 
             rawrender = TRUE;
 
@@ -3222,6 +3305,7 @@ void Wav_Renderizer()
             {
                 Chan_Mute_State[j] = FALSE;
             }
+            reset_carriers = TRUE;
 
             switch(rawrender_target)
             {
@@ -3334,6 +3418,8 @@ void Wav_Renderizer()
 
 Stop_WavRender:
     Song_Stop();
+    reset_carriers = TRUE;
+
     Post_Song_Init();
     Song_Playing = FALSE;
 
@@ -3384,7 +3470,6 @@ Stop_WavRender:
                             float(filesize / 1048576.0f), minutes, seconds);
             break;
     }
-    Status_Box(buffer);
 
     // Return to the start as all the values will be trashed anyway.
     Pattern_Line = 0;
@@ -3398,7 +3483,7 @@ Stop_WavRender:
     Read_SMPT();
     Actualize_Files_List(0);
 
-    Status_Box(buffer);
+    Status_Box(buffer, TRUE);
     Update_Pattern(0);
 }
 
@@ -3426,7 +3511,7 @@ void Delete_Instrument(void)
         Actualize_Master(0);
         Final_Mod_Length = 0;
         Actualize_Synth_Ed(UPDATE_SYNTH_ED_ALL);
-        Status_Box("Synth Deleted.");
+        Status_Box("Synth Deleted.", TRUE);
     }
 
     if(ZzaappOMatic == ZZAAPP_SPLIT)
@@ -3443,7 +3528,7 @@ void Delete_Instrument(void)
             Synthprg[Current_Instrument] = 1;
         }
         Renew_Sample_Ed();
-        Status_Box("Instrument Deleted.");
+        Status_Box("Instrument Deleted.", TRUE);
         Refresh_Sample();
         Actualize_Master(0);
     }
@@ -3462,7 +3547,7 @@ void Delete_Instrument(void)
             Synthprg[Current_Instrument] = 1;
         }
         Renew_Sample_Ed();
-        Status_Box("Instrument Deleted.");
+        Status_Box("Instrument Deleted.", TRUE);
         Refresh_Sample();
         Actualize_Master(0);
     }
@@ -3520,15 +3605,11 @@ void Set_Default_Channels_Polyphony(void)
 }
 
 // ------------------------------------------------------
-// Show song informations (summing instruments and patterns)
-void ShowInfo(void)
+// Return the number of synths
+int Get_Nbr_Synths(void)
 {
-    char tmp[256];
-    int pattsize = nPatterns * PATTERN_LEN;
-    int sampsize = 0;
-    int nbr_samp = 0;
-    int nbr_synth = 0;
     int i;
+    int nbr_synth = 0;
 
     for(i = 0; i < MAX_INSTRS; i++)
     {
@@ -3537,6 +3618,19 @@ void ShowInfo(void)
             nbr_synth++;
         }
     }
+    return nbr_synth;
+}
+
+// ------------------------------------------------------
+// Return the number of instruments
+int Get_Instrs_Data(int *samp_size)
+{
+    int nbr_samp = 0;
+
+    if(samp_size != NULL)
+    {
+        *samp_size = 0;
+    }
 
     for(int pp = 0; pp < MAX_INSTRS; pp++)
     {
@@ -3544,18 +3638,38 @@ void ShowInfo(void)
         {
             if(SampleType[pp][z] != 0)
             {
-                sampsize += Sample_Channels[pp][z] * Sample_Length[pp][z];
+                if(samp_size != NULL)
+                {
+                    *samp_size += Sample_Channels[pp][z] * Sample_Length[pp][z];
+                }
                 nbr_samp++;
             }
         }
     }
+    return nbr_samp;
+}
+
+// ------------------------------------------------------
+// Show song informations (summing instruments and patterns)
+void ShowInfo(void)
+{
+    char tmp[256];
+    int patt_size;
+    int nbr_samp;
+    int nbr_synth;
+    int samp_size;
+
+    patt_size = nPatterns * PATTERN_LEN;
+    nbr_synth = Get_Nbr_Synths();
+    nbr_samp = Get_Instrs_Data(&samp_size);
+
     sprintf(tmp, "%d Instruments (%d Bytes), "
                  "%d Synths, "
                  "%d Patterns (%d Bytes).",
-                 nbr_samp, sampsize,
+                 nbr_samp, samp_size,
                  nbr_synth, 
-                 nPatterns, pattsize);
-    Status_Box(tmp);
+                 nPatterns, patt_size);
+    Status_Box(tmp, TRUE);
 }
 
 // ------------------------------------------------------
@@ -3566,6 +3680,15 @@ Uint32 Timer_CallBack(Uint32 interval, void *param)
     {
         Req_Timer++;
         if(Req_Timer > Req_TimeOut) Req_Pressed_Button = 1;
+    }
+
+    if(!Status_Box_Wait && Status_Box_Wait_Done == 0)
+    {
+        Status_Box_Wait_Done = 1;
+    }
+    if(Status_Box_Wait)
+    {
+        Status_Box_Wait--;
     }
 
     // Don't save during a requester
@@ -3740,6 +3863,8 @@ void Keyboard_Handler(void)
 {
     int Cur_Position = Get_Song_Position();
     int Done_Value;
+    int data;
+    int validating_input = FALSE;
 
     // Exit tracker
     if(Get_LAlt() && Keys[SDLK_F4]) gui_action = GUI_CMD_EXIT;
@@ -3917,25 +4042,49 @@ void Keyboard_Handler(void)
         }
 
         // Previous column or previous track
-        if(Keys[SDLK_LEFT] && !Get_LCtrl() && !Get_LAlt())
+        if(Keys[SDLK_LEFT] && !Get_LCtrl() && !Get_LAlt() && !Get_RShift())
         {
             Goto_Previous_Column();
         }
 
         // Next column or next track
-        if(Keys[SDLK_RIGHT] && !Get_LCtrl() && !Get_LAlt())
+        if(Keys[SDLK_RIGHT] && !Get_LCtrl() && !Get_LAlt() && !Get_RShift())
         {
             Goto_Next_Column();
         }
 
+        // Decrease slider value by 1
+        if(Keys[SDLK_RIGHT] && !Get_LCtrl() && !Get_LAlt() && Get_RShift() && pattern_sliders && can_modify_song)
+        {
+            Set_Slider_Value(-1);
+        }
+
+        // Increase slider value by 1
+        if(Keys[SDLK_LEFT] && !Get_LCtrl() && !Get_LAlt() && Get_RShift() && pattern_sliders && can_modify_song)
+        {
+            Set_Slider_Value(1);
+        }
+
+        // Decrease slider value by 10
+        if(Keys[SDLK_DOWN] && !Get_LCtrl() && !Get_LAlt() && Get_RShift() && pattern_sliders && can_modify_song)
+        {
+            Set_Slider_Value(-10);
+        }
+
+        // Increase slider value by 10
+        if(Keys[SDLK_UP] && !Get_LCtrl() && !Get_LAlt() && Get_RShift() && pattern_sliders && can_modify_song)
+        {
+            Set_Slider_Value(10);
+        }
+
         // Previous row
-        if(Keys[SDLK_UP] && !Song_Playing)
+        if(Keys[SDLK_UP] && !Song_Playing && !Get_RShift())
         {
             Goto_Previous_Row(TRUE);
         }
 
         // Next row
-        if(Keys[SDLK_DOWN] && !Song_Playing)
+        if(Keys[SDLK_DOWN] && !Song_Playing && !Get_RShift())
         {
             Goto_Next_Row(TRUE);
         }
@@ -3953,21 +4102,24 @@ void Keyboard_Handler(void)
         }
 
         // Previous pattern
-        if((Keys_Sym[SDLK_KP_MINUS]) && pSequence[Cur_Position] > 0)
+        if((Keys_Sym[SDLK_KP_MINUS]) && pSequence[Cur_Position] > 0 && can_modify_song)
         {
             gui_action = GUI_CMD_PREV_PATT;
         }
 
         // Next pattern
-        if((Keys_Sym[SDLK_KP_PLUS]) && pSequence[Cur_Position] < 254)
+        if((Keys_Sym[SDLK_KP_PLUS]) && pSequence[Cur_Position] < 254 && can_modify_song)
         {
             gui_action = GUI_CMD_NEXT_PATT;
         }
 
-        if(Keys[SDLK_INSERT] && is_editing)
+        if(Keys[SDLK_INSERT] && can_modify_song)
         {
             // INSERT
-            if(Get_LShift()) Insert_Pattern_Line(Cur_Position);
+            if(Get_LShift())
+            {
+                Insert_Pattern_Line(Cur_Position);
+            }
             else
             {
                 Insert_Selection(Track_Under_Caret, Cur_Position);
@@ -3976,7 +4128,7 @@ void Keyboard_Handler(void)
 
         if(snamesel == INPUT_NONE)
         {
-            if(Keys[SDLK_BACKSPACE] && is_editing)
+            if(Keys[SDLK_BACKSPACE] && can_modify_song)
             {
                 // BACKSPACE
                 if(Get_LShift())
@@ -4393,11 +4545,13 @@ void Keyboard_Handler(void)
         {
             retletter[39] = TRUE;
             reelletter = TRUE;
+            validating_input = TRUE;
         }
         if(Keys[SDLK_KP_ENTER])
         {
             retletter[39] = TRUE;
             reelletter = TRUE;
+            validating_input = TRUE;
         }
         if(Keys[SDLK_PERIOD])
         {
@@ -4599,10 +4753,10 @@ void Keyboard_Handler(void)
                 is_editing = TRUE;
                 L_MaxLevel = 0;
                 R_MaxLevel = 0;
-                Switch_Cmd_Playing(FALSE);
                 Pattern_Line_Visual = Pattern_Line;
                 key_record_first_time = FALSE;
                 old_key_Pattern_Line = Pattern_Line;
+                Notify_Edit();
                 Clear_Midi_Channels_Pool();
                 player_pos = -1;
                 metronome_rows_counter = 0;
@@ -4681,25 +4835,68 @@ void Keyboard_Handler(void)
         }
     }
 
-    if(pos_space == 0 && !Keys[SDLK_SPACE]) pos_space = 1;
+    if(!Get_LAlt() && !Get_RAlt() && snamesel == INPUT_NONE && !validating_input && !is_recording)
+    {
+        if(Enter_Notification)
+        {
+            if(Enter_Notified)
+            {
+                po_ctrl2 = FALSE;
+                Enter_Notified = FALSE;
+                play_pattern = FALSE;
+                reset_carriers = FALSE;
+                if(Enter_Notified_Play_Pattern)
+                {
+                    play_pattern = TRUE;
+                }
+                gui_action = GUI_CMD_PLAY_SONG;
+            }
+        }
+        else
+        {
+            if(Enter_Notified)
+            {
+                Enter_Notified = FALSE;
+                is_recording = 0;
+                is_recording_2 = 0;
+                Nbr_Sub_NoteOff = 0;
+                Song_Stop();
+            }
+        }
+    }
+
+    if(pos_space == 0 && !Keys[SDLK_SPACE])
+    {
+        pos_space = 1;
+    }
 
     if(!is_recording)
     {
         // Play song
         if(Keys[SDLK_RCTRL] && snamesel == INPUT_NONE && po_ctrl2)
         {
-            plx = 0;
+            play_pattern = FALSE;
             po_ctrl2 = FALSE;
-            if(!Get_LShift()) Pattern_Line = 0;
+            reset_carriers = FALSE;
+            if(!Get_LShift())
+            {
+                reset_carriers = TRUE;
+                Pattern_Line = 0;
+            }
             gui_action = GUI_CMD_PLAY_SONG;
         }
         if(!Keys[SDLK_RCTRL] && !po_ctrl2) po_ctrl2 = TRUE;
 
         if(Keys[SDLK_RALT] && snamesel == INPUT_NONE && po_alt2)
         {
-            plx = 1;
+            play_pattern = TRUE;
             po_alt2 = FALSE;
-            if(!Get_LShift()) Pattern_Line = 0;
+            reset_carriers = FALSE;
+            if(!Get_LShift())
+            {
+                reset_carriers = TRUE;
+                Pattern_Line = 0;
+            }
             gui_action = GUI_CMD_PLAY_SONG;
         }
         if(!Keys[SDLK_RALT] && !po_alt2) po_alt2 = TRUE;
@@ -4743,6 +4940,7 @@ void Keyboard_Handler(void)
         {
             if(!Get_LAlt() && !Get_LShift())
             {
+                // Select the copy buffer
                 if(Keys[SDLK_1] || Keys[SDLK_KP1])
                 {
                     Curr_Buff_Block = 0;
@@ -4770,7 +4968,7 @@ void Keyboard_Handler(void)
 
                 if(Keys[SDLK_LEFT])
                 {
-                    if(pSequence[Cur_Position] > 0)
+                    if(pSequence[Cur_Position] > 0 && can_modify_song)
                     {
                         gui_action = GUI_CMD_PREV_PATT;
                     }
@@ -4778,7 +4976,7 @@ void Keyboard_Handler(void)
                 }
                 if(Keys[SDLK_RIGHT])
                 {
-                    if(pSequence[Cur_Position] < 254)
+                    if(pSequence[Cur_Position] < 254 && can_modify_song)
                     {
                         gui_action = GUI_CMD_NEXT_PATT;
                     }
@@ -4802,38 +5000,42 @@ void Keyboard_Handler(void)
                     }
 
                     // Fill the values of a selected block with step add
-                    if(Keys[SDLK_f - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_f - UNICODE_OFFSET2] && can_modify_song)
                     {
                         Fill_Block(Cur_Position, Current_Edit_Steps);
                     }
 
                     // Randomize the values of a selected block with step add
-                    if(Keys[SDLK_r - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_r - UNICODE_OFFSET2] && can_modify_song)
                     {
                         Randomize_Block(Cur_Position, Current_Edit_Steps);
 
                     }
                     // Transpose the selection 1 semitone higher
-                    if(Keys[SDLK_u - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_u - UNICODE_OFFSET2] && can_modify_song)
                     {
+                        Reset_Transpose_Block();
                         Instrument_Semitone_Up_Block(Cur_Position);
                     }
 
                     // Transpose the selection 1 semitone lower
-                    if(Keys[SDLK_d - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_d - UNICODE_OFFSET2] && can_modify_song)
                     {
+                        Reset_Transpose_Block();
                         Instrument_Semitone_Down_Block(Cur_Position);
                     }
 
                     // Transpose the selection 1 octave higher
-                    if(Keys[SDLK_k - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_k - UNICODE_OFFSET2] && can_modify_song)
                     {
+                        Reset_Transpose_Block();
                         Instrument_Octave_Up_Block(Cur_Position);
                     }
 
                     // Transpose the selection 1 octave lower
-                    if(Keys[SDLK_l - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_l - UNICODE_OFFSET2] && can_modify_song)
                     {
+                        Reset_Transpose_Block();
                         Instrument_Octave_Down_Block(Cur_Position);
                     }
 
@@ -4861,7 +5063,7 @@ void Keyboard_Handler(void)
                     // Cut selected block
                     if(Keys[SDLK_x - UNICODE_OFFSET2] &&
                        block_start_track[Curr_Buff_Block] != -1 &&
-                       block_end_track[Curr_Buff_Block] != -1)
+                       block_end_track[Curr_Buff_Block] != -1 && can_modify_song)
                     {
                         Cut_Selection(Cur_Position);
                     }
@@ -4875,24 +5077,24 @@ void Keyboard_Handler(void)
                     }
 
                     // Interpolate the values of a selected block
-                    if(Keys[SDLK_i - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_i - UNICODE_OFFSET2] && can_modify_song)
                     {
                         Interpolate_Block(Cur_Position);
                     }
 
                     // Randomize the values of a selected block
-                    if(Keys[SDLK_r - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_r - UNICODE_OFFSET2] && can_modify_song)
                     {
                         Randomize_Block(Cur_Position, 1);
                     }
 
                     // Fill the values of a selected block
-                    if(Keys[SDLK_f - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_f - UNICODE_OFFSET2] && can_modify_song)
                     {
                         Fill_Block(Cur_Position, 1);
                     }
 
-                    // Randomize the values of a selected block
+                    // Save a selected block or a whole pattern
                     if(Keys[SDLK_w - UNICODE_OFFSET2])
                     {
                         if(File_Exist_Req("%s" SLASH "%s.ppb", Dir_Patterns, Selection_Name))
@@ -4909,32 +5111,36 @@ void Keyboard_Handler(void)
                     if(Keys[SDLK_v - UNICODE_OFFSET2] &&
 					   block_start_track_nibble[Curr_Buff_Block] != -1 &&
 					   block_end_track_nibble[Curr_Buff_Block] != -1 &&
-					   is_editing)
+					   can_modify_song)
                     {
                         Paste_Block(Cur_Position, Paste_Across, TRUE);
                     }
 
                     // Transpose the selection 1 semitone higher
-                    if(Keys[SDLK_u - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_u - UNICODE_OFFSET2] && can_modify_song)
                     {
+                        Reset_Transpose_Block();
                         Semitone_Up_Block(Cur_Position);
                     }
 
                     // Transpose the selection 1 semitone lower
-                    if(Keys[SDLK_d - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_d - UNICODE_OFFSET2] && can_modify_song)
                     {
+                        Reset_Transpose_Block();
                         Semitone_Down_Block(Cur_Position);
                     }
 
                     // Transpose the selection 1 octave higher
-                    if(Keys[SDLK_k - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_k - UNICODE_OFFSET2] && can_modify_song)
                     {
+                        Reset_Transpose_Block();
                         Octave_Up_Block(Cur_Position);
                     }
 
                     // Transpose the selection 1 octave lower
-                    if(Keys[SDLK_l - UNICODE_OFFSET2] && is_editing)
+                    if(Keys[SDLK_l - UNICODE_OFFSET2] && can_modify_song)
                     {
+                        Reset_Transpose_Block();
                         Octave_Down_Block(Cur_Position);
                     }
 
@@ -4999,7 +5205,7 @@ void Keyboard_Handler(void)
         Done_Value = FALSE;
         if(!Get_LAlt())
         {
-            if(retvalue != NOTE_OFF && is_editing == 1)
+            if(retvalue != NOTE_OFF && is_editing)
             {
                 int ped_cell;
                 int i;
@@ -5041,6 +5247,22 @@ void Keyboard_Handler(void)
                     if(Column_Under_Caret == (19 + j)) ped_cell = PATTERN_FX4;         	// fx 4
                     if(Column_Under_Caret == (21 + j)) ped_cell = PATTERN_FXDATA4;     	// fx 4 data
                     
+                    switch(ped_cell)
+                    {
+                        case PATTERN_FXDATA:
+                        case PATTERN_FXDATA2:
+                        case PATTERN_FXDATA3:
+                        case PATTERN_FXDATA4:
+                            data = Get_Column_Data_With_Track(Channels_MultiNotes, Channels_Effects, Cur_Position,
+                                                              Track_Under_Caret, Column_Under_Caret - 2, Pattern_Line);
+                            if(data == 0)
+                            {
+                                Done_Value = TRUE;
+                                goto Cannot_Modify_Odd;
+                            }
+                            break;
+                    }
+
                     ltretvalue = retvalue;
                     xoffseted = (Track_Under_Caret * PATTERN_BYTES) + (Pattern_Line * PATTERN_ROW_LEN) + ped_cell;
 
@@ -5123,6 +5345,7 @@ void Keyboard_Handler(void)
                     }
                     Update_Pattern(0);
                 }
+Cannot_Modify_Odd:
 
                 if(!Done_Value)
                 {
@@ -5163,6 +5386,22 @@ void Keyboard_Handler(void)
                         ltretvalue = retvalue;
                         xoffseted = (Track_Under_Caret * PATTERN_BYTES) + (Pattern_Line * PATTERN_ROW_LEN) + ped_cell;
                         int oldval = *(RawPatterns + pSequence[Cur_Position] * PATTERN_LEN + xoffseted);
+
+                            switch(ped_cell)
+                            {
+                                case PATTERN_FXDATA:
+                                case PATTERN_FXDATA2:
+                                case PATTERN_FXDATA3:
+                                case PATTERN_FXDATA4:
+                                    data = Get_Column_Data_With_Track(Channels_MultiNotes, Channels_Effects, Cur_Position,
+                                                                      Track_Under_Caret, Column_Under_Caret - 3, Pattern_Line);
+                                    if(data == 0)
+                                    {
+                                        Done_Value = TRUE;
+                                        goto Cannot_Modify_Even;
+                                    }
+                                    break;
+                            }
 
                         if(retvalue < 16)
                         {
@@ -5240,6 +5479,7 @@ void Keyboard_Handler(void)
                         Update_Pattern(0);
                     }
                 }
+Cannot_Modify_Even:;
             }
         }
     }
@@ -5415,8 +5655,14 @@ void Keyboard_Handler(void)
                                 }
                                 Sub_Channels_NoteOff[Track_Under_Caret][Nbr_Sub_NoteOff].Sub_Channel = pos;
 
-                                if(Nbr_Sub_NoteOff < (Channels_MultiNotes[Track_Under_Caret] - 1)) Nbr_Sub_NoteOff++;
-                                else Nbr_Sub_NoteOff = 0;
+                                if(Nbr_Sub_NoteOff < (Channels_MultiNotes[Track_Under_Caret] - 1))
+                                {
+                                    Nbr_Sub_NoteOff++;
+                                }
+                                else
+                                {
+                                    Nbr_Sub_NoteOff = 0;
+                                }
                             }
 
                             if(pos > (Channels_MultiNotes[Track_Under_Caret] - 1))
@@ -5458,7 +5704,10 @@ void Keyboard_Handler(void)
                                 if(Nbr_Sub_NoteOff < 0) Nbr_Sub_NoteOff = 0;
                             }
                         }
-                        if(is_recording_2) move_down = TRUE;
+                        if(is_recording_2)
+                        {
+                            move_down = TRUE;
+                        }
                     }
 No_Key:;
                 }
@@ -5490,7 +5739,7 @@ No_Key:;
         }
 
         // Note off (RSHIFT)
-        if(retnote == -3 && is_editing && !is_recording_2)
+        if(retnote == -3 && is_editing && !is_recording_2 && !pattern_sliders)
         {
             int column = 0;
             int in_note = FALSE;
@@ -5570,7 +5819,7 @@ No_Key:;
 }
 
 // ------------------------------------------------------
-// Retrieve mouse datas
+// Retrieve mouse data
 char Check_Mouse_No_Button(int x, int y, int xs, int ys)
 {
     if(Mouse.x > x && Mouse.x < x + xs && Mouse.y > y && Mouse.y < y + ys + 1)
@@ -5902,14 +6151,16 @@ void Mouse_Handler(void)
         // Play song from top
         if(Check_Mouse(8, 28, 39, 16))
         {
-            plx = 0;
+            play_pattern = FALSE;
+            reset_carriers = TRUE;
             Pattern_Line = 0;
             gui_action = GUI_CMD_PLAY_SONG;
         }
         // Play pattern from top
         if(Check_Mouse(49, 28, 39, 16))
         {
-            plx = 1;
+            play_pattern = TRUE;
+            reset_carriers = TRUE;
             Pattern_Line = 0;
             gui_action = GUI_CMD_PLAY_SONG;
         }
@@ -5940,32 +6191,32 @@ void Mouse_Handler(void)
         {
             gui_action = GUI_CMD_NEXT_POSITION;
         }
-        if(Check_Mouse(188, 46, 16, 16) && pSequence[Cur_Position] > 0)
+        if(Check_Mouse(188, 46, 16, 16) && pSequence[Cur_Position] > 0 && can_modify_song)
         {
             gui_action = GUI_CMD_PREV_PATT;
         }
-        if(Check_Mouse(232, 46, 16, 16) && pSequence[Cur_Position] < 254)
+        if(Check_Mouse(232, 46, 16, 16) && pSequence[Cur_Position] < 254 && can_modify_song)
         {
             gui_action = GUI_CMD_NEXT_PATT;
         }
-        if(Check_Mouse(188, 64, 16, 16) && Song_Length > 1)
+        if(Check_Mouse(188, 64, 16, 16) && Song_Length > 1 && can_modify_song)
         {
             gui_action = GUI_CMD_REDUCE_SONG_LENGTH;
         }
-        if(Check_Mouse(232, 64, 16, 16) && Song_Length < 255)
+        if(Check_Mouse(232, 64, 16, 16) && Song_Length < 255 && can_modify_song)
         {
             gui_action = GUI_CMD_INCREASE_SONG_LENGTH;
         }
 
         // Decrease the number of lines for this pattern
-        if(Check_Mouse(188, 82, 16, 16) && patternLines[pSequence[Cur_Position]] > 1)
+        if(Check_Mouse(188, 82, 16, 16) && patternLines[pSequence[Cur_Position]] > 1 && can_modify_song)
         {
             patternLines[pSequence[Cur_Position]]--;
             if(Pattern_Line >= patternLines[pSequence[Cur_Position]]) Pattern_Line = patternLines[pSequence[Cur_Position]] - 1;
             gui_action = GUI_CMD_SET_PATTERN_LENGTH;
         }
         // Increase the number of lines for this pattern
-        if(Check_Mouse(232, 82, 16, 16) && patternLines[pSequence[Cur_Position]] < 128)
+        if(Check_Mouse(232, 82, 16, 16) && patternLines[pSequence[Cur_Position]] < 128 && can_modify_song)
         {
             patternLines[pSequence[Cur_Position]]++;
             gui_action = GUI_CMD_SET_PATTERN_LENGTH;
@@ -5974,7 +6225,7 @@ void Mouse_Handler(void)
         // --- Song Settings --------------------------------------
 
         // Reduce the number of tracks
-        if(Check_Mouse(324, 28, 16, 16) && Song_Tracks > 1)
+        if(Check_Mouse(324, 28, 16, 16) && Song_Tracks > 1 && can_modify_song)
         {
             Song_Tracks--;
             if(Song_Tracks < 1) Song_Tracks = 1;
@@ -5982,7 +6233,7 @@ void Mouse_Handler(void)
             teac = 4;
         }
         // Increase the number of tracks
-        if(Check_Mouse(368, 28, 16, 16) && Song_Tracks < 16)
+        if(Check_Mouse(368, 28, 16, 16) && Song_Tracks < 16 && can_modify_song)
         {
             Song_Tracks++;
             if(Song_Tracks > 16) Song_Tracks = 16;
@@ -5991,7 +6242,7 @@ void Mouse_Handler(void)
         }
 
         // Delete the current track
-        if(Check_Mouse(313, 28, 9, 16) && Song_Tracks >= 1 && !Song_Playing)
+        if(Check_Mouse(313, 28, 9, 16) && Song_Tracks >= 1 && !Song_Playing && can_modify_song)
         {
             Song_Tracks--;
             if(Song_Tracks < 1)
@@ -6008,7 +6259,7 @@ void Mouse_Handler(void)
             teac = 4;
         }
         // Insert a track at current position
-        if(Check_Mouse(302, 28, 9, 16) && Song_Tracks < 16 && !Song_Playing)
+        if(Check_Mouse(302, 28, 9, 16) && Song_Tracks < 16 && !Song_Playing && can_modify_song)
         {
             Song_Tracks++;
             if(Song_Tracks > 16)
@@ -6056,7 +6307,7 @@ void Mouse_Handler(void)
         }
 
         // Delete instrument
-        if(Check_Mouse(320, 108, 64, 16))
+        if(Check_Mouse(320, 108, 28, 16))
         {
             Display_Requester(&Delete_Requester, GUI_CMD_DELETE_INSTRUMENT, NULL, TRUE);
         }
@@ -6123,11 +6374,29 @@ void Mouse_Handler(void)
             if(pattern_double)
             {
                 Gui_Draw_Button_Box(332 + (18 * 2), 126, 16, 16, "\017", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+                Display_Patterns_Sliders_Status();
             }
             else
             {
                 Gui_Draw_Button_Box(332 + (18 * 2), 126, 16, 16, "\016", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+                Display_Patterns_Sliders_Status();
             }
+            Update_Pattern(0);
+        }
+
+        // Switch patterns sliders
+        if(Check_Mouse(350, 108, 16, 16))
+        {
+            pattern_sliders ^= TRUE;
+            Display_Patterns_Sliders_Status();
+            Update_Pattern(0);
+        }
+
+        // Switch patterns sliders
+        if(Check_Mouse(368, 108, 16, 16) && pattern_double)
+        {
+            pattern_sliders_numbers ^= TRUE;
+            Display_Patterns_Sliders_Status();
             Update_Pattern(0);
         }
 
@@ -6164,7 +6433,7 @@ void Mouse_Handler(void)
         {
             if(block_start_track_nibble[Curr_Buff_Block] != -1 &&
                block_end_track_nibble[Curr_Buff_Block] != -1 &&
-               is_editing)
+               can_modify_song)
             {
                 Paste_Block(Cur_Position, Paste_Across, TRUE);
             }
@@ -6172,7 +6441,7 @@ void Mouse_Handler(void)
         // Delete
         if(Check_Mouse(8 + (63 * 2), 164, 61, 10))
         {
-            if(is_editing)
+            if(can_modify_song)
             {
                 Delete_Selection(Cur_Position);
                 Update_Pattern(0);
@@ -6181,37 +6450,62 @@ void Mouse_Handler(void)
         // Interpolate
         if(Check_Mouse(8 + (63 * 3), 152, 61, 10))
         {
-            if(is_editing) Interpolate_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Interpolate_Block(Cur_Position);
+            }
         }
         // Randomize
         if(Check_Mouse(8 + (63 * 3), 164, 31, 10))
         {
-            if(is_editing) Randomize_Block(Cur_Position, 1);
+            if(can_modify_song)
+            {
+                Randomize_Block(Cur_Position, 1);
+            }
         }
         // Fill
         if(Check_Mouse(8 + (63 * 3) + 31, 164, 31, 10))
         {
-            if(is_editing) Fill_Block(Cur_Position, 1);
+            if(can_modify_song)
+            {
+                Fill_Block(Cur_Position, 1);
+            }
         }
         // Semitone up
         if(Check_Mouse(8 + (63 * 4), 152, 61, 10))
         {
-            if(is_editing) Semitone_Up_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Reset_Transpose_Block();
+                Semitone_Up_Block(Cur_Position);
+            }
         }
         // Semitone down
         if(Check_Mouse(8 + (63 * 4), 164, 61, 10))
         {
-            if(is_editing) Semitone_Down_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Reset_Transpose_Block();
+                Semitone_Down_Block(Cur_Position);
+            }
         }
         // Octave up
         if(Check_Mouse(8 + (63 * 5), 152, 61, 10))
         {
-            if(is_editing) Octave_Up_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Reset_Transpose_Block();
+                Octave_Up_Block(Cur_Position);
+            }
         }
         // Octave down
         if(Check_Mouse(8 + (63 * 5), 164, 61, 10))
         {
-            if(is_editing) Octave_Down_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Reset_Transpose_Block();
+                Octave_Down_Block(Cur_Position);
+            }
         }
 
         // Switch small / large patterns
@@ -6273,7 +6567,7 @@ void Mouse_Handler(void)
         Reset_Pattern_Scrolling_Horiz();
         Mouse_Right_Pattern_Ed();
 
-        if(Check_Mouse(188, 82, 16, 16))
+        if(Check_Mouse(188, 82, 16, 16) && can_modify_song)
         {
             int ltp = patternLines[pSequence[Cur_Position]];
             ltp -= 8;
@@ -6283,7 +6577,7 @@ void Mouse_Handler(void)
             gui_action = GUI_CMD_SET_PATTERN_LENGTH;
         }
 
-        if(Check_Mouse(232, 82, 16, 16))
+        if(Check_Mouse(232, 82, 16, 16) && can_modify_song)
         {
             int ltp = patternLines[pSequence[Cur_Position]];
             ltp += 8;
@@ -6304,13 +6598,15 @@ void Mouse_Handler(void)
         // Play song from current position
         if(Check_Mouse(8, 28, 39, 16))
         {
-            plx = 0;
+            play_pattern = FALSE;
+            reset_carriers = FALSE;
             gui_action = GUI_CMD_PLAY_SONG;
         }
         // Play pattern from current position
         if(Check_Mouse(49, 28, 39, 16))
         {
-            plx = 1;
+            play_pattern = TRUE;
+            reset_carriers = FALSE;
             gui_action = GUI_CMD_PLAY_SONG;
         }
 
@@ -6333,7 +6629,7 @@ void Mouse_Handler(void)
         }
 
         // Reduce the number of tracks
-        if(Check_Mouse(324, 28, 16, 16) && Song_Tracks > 1)
+        if(Check_Mouse(324, 28, 16, 16) && Song_Tracks > 1 && can_modify_song)
         {
             Song_Tracks -= 5;
             if(Song_Tracks < 1) Song_Tracks = 1;
@@ -6341,7 +6637,7 @@ void Mouse_Handler(void)
             teac = 4;
         }
         // Increase the number of tracks
-        if(Check_Mouse(368, 28, 16, 16) && Song_Tracks < 16)
+        if(Check_Mouse(368, 28, 16, 16) && Song_Tracks < 16 && can_modify_song)
         {
             Song_Tracks += 5;
             if(Song_Tracks > 16) Song_Tracks = 16;
@@ -6381,7 +6677,7 @@ void Mouse_Handler(void)
         }
 
         // Song_Length - 10
-        if(Check_Mouse(188, 64, 16, 16) == 1 && Song_Length != 1)
+        if(Check_Mouse(188, 64, 16, 16) == 1 && Song_Length != 1 && can_modify_song)
         {
             int tLength = Song_Length;
             tLength -= 10;
@@ -6391,7 +6687,7 @@ void Mouse_Handler(void)
             gui_action = GUI_CMD_UPDATE_SEQUENCER;
         }
         // Song_Length + 10
-        if(Check_Mouse(232, 64, 16, 16) == 1 && Song_Length != 255)
+        if(Check_Mouse(232, 64, 16, 16) == 1 && Song_Length != 255 && can_modify_song)
         {
             int tLength = Song_Length;
             tLength += 10;
@@ -6402,23 +6698,23 @@ void Mouse_Handler(void)
         }
 
         // -10 positions
-        if(Check_Mouse(188, 28, 16, 16) == 1)
+        if(Check_Mouse(188, 28, 16, 16))
         {
             gui_action = GUI_CMD_REDUCE_POSITIONS_10;
         }
         // +10 positions
-        if(Check_Mouse(232, 28, 16, 16) == 1)
+        if(Check_Mouse(232, 28, 16, 16))
         {
             gui_action = GUI_CMD_INCREASE_POSITIONS_10;
         }
 
         // -10 patterns
-        if(Check_Mouse(188, 46, 16, 16) == 1)
+        if(Check_Mouse(188, 46, 16, 16) && can_modify_song)
         {
             gui_action = GUI_CMD_REDUCE_PATTERNS_10;
         }
         // +10 patterns
-        if(Check_Mouse(232, 46, 16, 16) == 1)
+        if(Check_Mouse(232, 46, 16, 16) && can_modify_song)
         {
             gui_action = GUI_CMD_INCREASE_PATTERNS_10;
         }
@@ -6439,37 +6735,60 @@ void Mouse_Handler(void)
         {
             Select_All_Notes_Block();
         }
+
         // Semitone up
         if(Check_Mouse(8 + (63 * 4), 152, 61, 10))
         {
-            if(is_editing) Instrument_Semitone_Up_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Reset_Transpose_Block();
+                Instrument_Semitone_Up_Block(Cur_Position);
+            }
         }
         // Semitone down
         if(Check_Mouse(8 + (63 * 4), 164, 61, 10))
         {
-            if(is_editing) Instrument_Semitone_Down_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Reset_Transpose_Block();
+                Instrument_Semitone_Down_Block(Cur_Position);
+            }
         }
         // Instrument octave up
         if(Check_Mouse(8 + (63 * 5), 152, 61, 10))
         {
-            if(is_editing) Instrument_Octave_Up_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Reset_Transpose_Block();
+                Instrument_Octave_Up_Block(Cur_Position);
+            }
         }
         // Instrument octave down
         if(Check_Mouse(8 + (63 * 5), 164, 61, 10))
         {
-            if(is_editing) Instrument_Octave_Down_Block(Cur_Position);
+            if(can_modify_song)
+            {
+                Reset_Transpose_Block();
+                Instrument_Octave_Down_Block(Cur_Position);
+            }
         }
 
         // Fill with step add.
         if(Check_Mouse(8 + (63 * 3) + 31, 164, 31, 10))
         {
-            if(is_editing) Fill_Block(Cur_Position, Current_Edit_Steps);
+            if(can_modify_song)
+            {
+                Fill_Block(Cur_Position, Current_Edit_Steps);
+            }
         }
 
         // Randomize with step add
         if(Check_Mouse(8 + (63 * 3), 164, 31, 10))
         {
-            if(is_editing) Randomize_Block(Cur_Position, Current_Edit_Steps);
+            if(can_modify_song)
+            {
+                Randomize_Block(Cur_Position, Current_Edit_Steps);
+            }
         }
 
         // Stereo scopes.
@@ -6618,13 +6937,13 @@ int Get_Free_Midi_Sub_Channel(int track)
 
 // ------------------------------------------------------
 // Search & return the midi channel corresponding to the given data
-int Search_Corresponding_Midi_Sub_Channel(int track, Uint32 Datas)
+int Search_Corresponding_Midi_Sub_Channel(int track, Uint32 Data)
 {
     int i;
 
     for(i = 0; i < MAX_TRACKS; i++)
     {
-        if(Alloc_midi_Channels[track][i] == (Datas & 0x00ff00))
+        if(Alloc_midi_Channels[track][i] == (Data & 0x00ff00))
         {
             return(i);
         }
@@ -6681,7 +7000,7 @@ void Display_Master_Volume(void)
 
     if(mas_vol < 0.01f) mas_vol = 0.01f;
     if(mas_vol > 1.0f) mas_vol = 1.0f;
-    Gui_Draw_Button_Box(394, 6, 28, 16, "Mast", BUTTON_NORMAL | BUTTON_DISABLED | BUTTON_TEXT_CENTERED);
+    Gui_Draw_Button_Box(394, 6, 28, 16, "M.Vol", BUTTON_NORMAL | BUTTON_DISABLED | BUTTON_TEXT_CENTERED);
     Real_Slider(394 + 28, 6, (int) (mas_vol * 128.0f), TRUE);
     sprintf(String, "%d%%", (int) (mas_vol * 100.0f));
     Print_String(String, 394 + 28, 8, 145, BUTTON_TEXT_CENTERED);
@@ -6743,9 +7062,7 @@ void Actualize_Master(char gode)
     {
         if(Beats_Per_Min < 20) Beats_Per_Min = 20;
         if(Beats_Per_Min > 255) Beats_Per_Min = 255;
-        Switch_Cmd_Playing(!Song_Playing);
-        //Gui_Draw_Arrows_Number_Box(324, 46, Beats_Per_Min, (Song_Playing ? BUTTON_NORMAL | BUTTON_DISABLED : BUTTON_NORMAL) |
-          //                                               BUTTON_TEXT_CENTERED | (Song_Playing ? 0 : BUTTON_RIGHT_MOUSE));
+        Switch_Cmd_Playing();
     }
 
     if(gode == 0 || gode == 2)
@@ -6765,22 +7082,7 @@ void Actualize_Master(char gode)
             Actualize_Fx_Ed(10);
             Actualize_Fx_Ed(11);
         }
-        Switch_Cmd_Playing(!Song_Playing);
-//        Gui_Draw_Arrows_Number_Box2(324, 64, Ticks_Per_Beat, (Song_Playing ? BUTTON_NORMAL | BUTTON_DISABLED : BUTTON_NORMAL) |
-  //                                                         BUTTON_TEXT_CENTERED | (Song_Playing ? 0 : BUTTON_RIGHT_MOUSE));
-    }
-
-    if(gode == 0)
-    {
-        Gui_Draw_Arrows_Number_Box2(324, 28, Song_Tracks, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
-    }
-
-    if(gode == 4)
-    {
-        Gui_Draw_Arrows_Number_Box2(324, 28, Song_Tracks, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
-
-        if(userscreen == USER_SCREEN_SEQUENCER) Actualize_Seq_Ed(0);
-        Update_Pattern(0);
+        Switch_Cmd_Playing();
     }
 
     SamplesPerTick = (int) ((60 * MIX_RATE) / (Beats_Per_Min * Ticks_Per_Beat));
@@ -6789,7 +7091,20 @@ void Actualize_Master(char gode)
 
     if(gode == 5)
     {
-        Switch_Cmd_Playing(TRUE);
+        Switch_Cmd_Playing();
+    }
+
+    if(gode == 0)
+    {
+        Gui_Draw_Arrows_Number_Box2(324, 28, Song_Tracks, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE | (can_modify_song ^ BUTTON_DISABLED));
+    }
+
+    if(gode == 4)
+    {
+        Gui_Draw_Arrows_Number_Box2(324, 28, Song_Tracks, BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE | (can_modify_song ^ BUTTON_DISABLED));
+
+        Actualize_Seq_Ed(0);
+        Update_Pattern(0);
     }
 
     if(userscreen == USER_SCREEN_SETUP_EDIT) Actualize_Master_Ed(3);
@@ -7045,7 +7360,7 @@ void Draw_Scope(void)
     int i;
     int pixel_color = COL_SCOPESSAMPLES;
     float pos_in_line;
-    float datas;
+    float data;
     int x_max;
     int nibble_pos;
     int offset_scope = pos_scope_latency;
@@ -7061,7 +7376,7 @@ void Draw_Scope(void)
     if(Scopish == SCOPE_ZONE_SCOPE)
     {
         SetColor(COL_BACKGROUND);
-        Fillrect(394, 42, Cur_Width, 179);
+        Fillrect(394, 42, Cur_Width - 1, 179);
 
         cur_pos_x = 0;
         if(Scopish_LeftRight)
@@ -7088,10 +7403,10 @@ void Draw_Scope(void)
                 for(int s = 0; s < x_max; s++)
                 {
                     pos_in_line = ((float) s) / (float) x_max;
-                    datas = (Scope_Dats_LeftRight[i][offset_scope + (int) (pos_in_line * 128)] * 0.25f) / 8192;
-                    if(datas < -1.0f) datas = -1.0f;
-                    if(datas > 1.0f) datas = 1.0f;
-                    int y = 42 + ptrTbl_Dat->y_pos + (int) (datas * ptrTbl_Dat->y_large);
+                    data = (Scope_Dats_LeftRight[i][offset_scope + (int) (pos_in_line * 128)]) / 32767.0f;
+                    if(data < -1.0f) data = -1.0f;
+                    if(data > 1.0f) data = 1.0f;
+                    int y = 42 + ptrTbl_Dat->y_pos + (int) (data * ptrTbl_Dat->y_large);
                     DrawPixel(cur_pos_x, y, pixel_color);
                     cur_pos_x++;
                 }
@@ -7135,10 +7450,16 @@ void Draw_Scope(void)
                 {
                     // [0..1]
                     pos_in_line = ((float) s) / (float) x_max;
-                    datas = Scope_Dats[i][offset_scope + (int) (pos_in_line * 128)] / 8192;
-                    if(datas < -1.0f) datas = -1.0f;
-                    if(datas > 1.0f) datas = 1.0f;
-                    int y = 42 + ptrTbl_Dat->y_pos + (int) (datas * ptrTbl_Dat->y_large);
+                    data = Scope_Dats[i][offset_scope + (int) (pos_in_line * 128)];
+                    if(data < -1.0f)
+                    {
+                        data = -1.0f;
+                    }
+                    if(data > 1.0f)
+                    {
+                        data = 1.0f;
+                    }
+                    int y = 42 + ptrTbl_Dat->y_pos + (int) (data * (ptrTbl_Dat->y_large ));
                     DrawPixel(cur_pos_x, y, pixel_color);
                     cur_pos_x++;
                 }
@@ -7157,6 +7478,7 @@ int Init_Scopes_VuMeters_Buffers(void)
     pos_scope_latency = 0;
     for(i = 0; i < MAX_TRACKS; i++)
     {  
+        // ---
         if(Scope_Dats[i])
         {
             free(Scope_Dats[i]);
@@ -7168,27 +7490,29 @@ int Init_Scopes_VuMeters_Buffers(void)
         }
         memset(Scope_Dats[i], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
 
-        if(VuMeters_Dats_L[i])
+        // ---
+        if(Scope_Dats_L[i])
         {
-            free(VuMeters_Dats_L[i]);
+            free(Scope_Dats_L[i]);
         }
-        VuMeters_Dats_L[i] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
-        if(!VuMeters_Dats_L[i])
+        Scope_Dats_L[i] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
+        if(!Scope_Dats_L[i])
         {
             return(FALSE);
         }
-        memset(VuMeters_Dats_L[i], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
+        memset(Scope_Dats_L[i], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
 
-        if(VuMeters_Dats_R[i])
+        // ---
+        if(Scope_Dats_R[i])
         {
-            free(VuMeters_Dats_R[i]);
+            free(Scope_Dats_R[i]);
         }
-        VuMeters_Dats_R[i] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
-        if(!VuMeters_Dats_R[i])
+        Scope_Dats_R[i] = (float *) malloc(((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
+        if(!Scope_Dats_R[i])
         {
             return(FALSE);
         }
-        memset(VuMeters_Dats_R[i], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
+        memset(Scope_Dats_R[i], 0, ((AUDIO_Latency + 1) + (512 * 4)) * 2 * sizeof(float));
     }
 
     if(Scope_Dats_LeftRight[0])
@@ -7222,7 +7546,7 @@ void Draw_VuMeters(void)
     int j;
     LPDAT_POS_SCOPE ptrTbl_Dat;
     float pos_in_line;
-    float datas;
+    float data;
     float MaxLevel_L;
     float MaxLevel_R;
     int i_MaxLevel_L;
@@ -7242,7 +7566,7 @@ void Draw_VuMeters(void)
     int start_pos_x;
 
     SetColor(COL_BACKGROUND);
-    Fillrect(394, 42, Cur_Width, 179);
+    Fillrect(394, 42, Cur_Width - 1, 179);
 
     // Tracks
     ptrTbl_Dat = &Scope_Table_Dats[Scope_Table[Song_Tracks].offset];
@@ -7277,68 +7601,77 @@ void Draw_VuMeters(void)
             x_max += max_right % ptrTbl_Dat->x_max;
         }
         MaxLevel_L = 0.0f;  
-        MaxLevel_R = 0.0f;  
+        MaxLevel_R = 0.0f;
         start_pos_x = cur_pos_x;
         x_max_half = x_max >> 2;
-        x_max_half_start = x_max_half ;
+        x_max_half_start = x_max_half;
+
         for(int s = 0; s < x_max; s++)
         {
             // [0..1]
             pos_in_line = ((float) s) / (float) x_max;
 
-            datas = VuMeters_Dats_L[i][offset_scope + (int) (pos_in_line * 128)];
-            datas = fabsf(datas);
-            if(datas > MaxLevel_L)
+            data = Scope_Dats_L[i][offset_scope + (int) (pos_in_line * 128)];
+            data = absf(data);
+            if(data > 1.0f)
             {
-                MaxLevel_L = (int) datas;
+                data = 1.0f;
             }
-            MaxLevel_L *= 0.002f;
-            if(MaxLevel_L > ((ptrTbl_Dat->y_large << 1) - 2))
+            if(data > MaxLevel_L)
             {
-                MaxLevel_L = (ptrTbl_Dat->y_large << 1) - 2;
-            }
-
-            datas = VuMeters_Dats_R[i][offset_scope + (int) (pos_in_line * 128)];
-            datas = fabsf(datas);
-            if(datas > MaxLevel_R)
-            {
-                MaxLevel_R = (int) datas;
-            }
-            MaxLevel_R *= 0.002f;
-            if(MaxLevel_R > ((ptrTbl_Dat->y_large << 1) - 2))
-            {
-                MaxLevel_R = (ptrTbl_Dat->y_large << 1) - 2;
-            }
-            peak_line = (ptrTbl_Dat->y_large << 1) - (ptrTbl_Dat->y_large >> 1);
-            i_MaxLevel_L = MaxLevel_L;
-            i_MaxLevel_R = MaxLevel_R;
-            bottom_line = 44 + (ptrTbl_Dat->y_pos + ptrTbl_Dat->y_large);
-            
-            for(j = 0; j < i_MaxLevel_L + 1; j += 2)
-            {
-                if(j > peak_line)
-                {
-                    DrawHLine(bottom_line - j, start_pos_x + x_max_half_start + 2, start_pos_x + x_max_half_start + x_max_half - 4, COL_VUMETERPEAK);
-                }
-                else
-                {
-                    DrawHLine(bottom_line - j, start_pos_x  + x_max_half_start + 2, start_pos_x  + x_max_half_start + x_max_half - 4, COL_VUMETER);
-                }
+                MaxLevel_L = data;
             }
 
-            for(j = 0; j < i_MaxLevel_R + 1; j += 2)
+            data = Scope_Dats_R[i][offset_scope + (int) (pos_in_line * 128)];
+            data = absf(data);
+            if(data > 1.0f)
             {
-                if(j > peak_line)
-                {
-                    DrawHLine(bottom_line - j, start_pos_x  + x_max_half_start + x_max_half + 2, start_pos_x  + x_max_half_start + x_max_half + x_max_half - 4, COL_VUMETERPEAK);
-                }
-                else
-                {
-                    DrawHLine(bottom_line - j, start_pos_x  + x_max_half_start + x_max_half + 2, start_pos_x  + x_max_half_start + x_max_half + x_max_half - 4, COL_VUMETER);
-                }
+                data = 1.0f;
             }
-            cur_pos_x++;
+            if(data > MaxLevel_R)
+            {
+                MaxLevel_R = data;
+            }
         }
+        MaxLevel_R *= (float) (ptrTbl_Dat->y_large << 1);
+        MaxLevel_L *= (float) (ptrTbl_Dat->y_large << 1);
+        peak_line = (ptrTbl_Dat->y_large << 1) - (ptrTbl_Dat->y_large >> 1);
+        i_MaxLevel_L = MaxLevel_L;
+        i_MaxLevel_R = MaxLevel_R;
+        bottom_line = 44 + (ptrTbl_Dat->y_pos + ptrTbl_Dat->y_large);
+        if(i_MaxLevel_L > bottom_line)
+        {
+            i_MaxLevel_L = bottom_line;
+        }
+        if(i_MaxLevel_R > bottom_line)
+        {
+            i_MaxLevel_R = bottom_line;
+        }
+    
+        for(j = 0; j < i_MaxLevel_L + 1; j += 2)
+        {
+            if(j > peak_line)
+            {
+                DrawHLine(bottom_line - j, start_pos_x + x_max_half_start + 2, start_pos_x + x_max_half_start + x_max_half - 4, COL_VUMETERPEAK);
+            }
+            else
+            {
+                DrawHLine(bottom_line - j, start_pos_x  + x_max_half_start + 2, start_pos_x  + x_max_half_start + x_max_half - 4, COL_VUMETER);
+            }
+        }
+
+        for(j = 0; j < i_MaxLevel_R + 1; j += 2)
+        {
+            if(j > peak_line)
+            {
+                DrawHLine(bottom_line - j, start_pos_x  + x_max_half_start + x_max_half + 2, start_pos_x  + x_max_half_start + x_max_half + x_max_half - 4, COL_VUMETERPEAK);
+            }
+            else
+            {
+                DrawHLine(bottom_line - j, start_pos_x  + x_max_half_start + x_max_half + 2, start_pos_x  + x_max_half_start + x_max_half + x_max_half - 4, COL_VUMETER);
+            }
+        }
+        cur_pos_x += x_max;
         ptrTbl_Dat++;
         pixel_color = COL_SCOPESSAMPLES;
     }
@@ -7383,6 +7716,7 @@ void Draw_Scope_Files_Button(void)
             Gui_Draw_Button_Box(394, 24, Cur_Width - 522, 16, NULL, BUTTON_NORMAL | BUTTON_DISABLED);
             Gui_Draw_Button_Box(Cur_Width - 72, 6, 16, 16, "\215", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
             Gui_Draw_Button_Box(Cur_Width - 54, 6, 16, 16, "\255", BUTTON_NORMAL | BUTTON_TEXT_CENTERED | BUTTON_RIGHT_MOUSE);
+            
             Display_Dirs_Icons(0);
             break;
 
@@ -7575,7 +7909,7 @@ void Unlock_Audio_Thread(void)
 }
 
 // ------------------------------------------------------
-// The status of the track zooms
+// The status of the patterns zoom
 void Display_Patterns_Sizes_Status(void)
 {
     int i;
@@ -7609,5 +7943,63 @@ void Display_Patterns_Sizes_Status(void)
     else
     {
         Gui_Draw_Button_Box(332 + (18 * 2), 126, 16, 16, "\016", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+    }
+    Display_Patterns_Sliders_Status();
+}
+
+// ------------------------------------------------------
+// The status of the patterns sliders
+void Display_Patterns_Sliders_Status(void)
+{
+    if(pattern_double && pattern_sliders)
+    {
+        if(pattern_sliders_numbers)
+        {
+            Gui_Draw_Button_Box(368, 108, 16, 16, "00", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
+        }
+        else
+        {
+            Gui_Draw_Button_Box(368, 108, 16, 16, "00", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+        }
+    }
+    else
+    {
+        Gui_Draw_Button_Box(368, 108, 16, 16, "00", BUTTON_NORMAL | BUTTON_DISABLED | BUTTON_TEXT_CENTERED);
+    }
+    if(pattern_sliders)
+    {
+        Gui_Draw_Button_Box(350, 108, 16, 16, "S", BUTTON_PUSHED | BUTTON_TEXT_CENTERED);
+    }
+    else
+    {
+        Gui_Draw_Button_Box(350, 108, 16, 16, "S", BUTTON_NORMAL | BUTTON_TEXT_CENTERED);
+    }
+    Gui_Draw_Button_Box(320, 126, 10, 16, NULL, BUTTON_DISABLED);
+    Sanitize_Sliders_Block();
+}
+
+// ------------------------------------------------------
+// The status of the right shift key in edit mode
+void Display_RShift_Status(void)
+{
+    if(is_editing && pattern_sliders)
+    {
+        if(RShift_Notification)
+        {
+            if(RShift_Notified)
+            {
+                SetColor(COL_VUMETERPEAK);
+                Fillrect(320 + 1, 126 + 1, 320 + 1 + 9, 126  + 1 + 15);
+                RShift_Notified = FALSE;
+            }
+        }
+        else
+        {
+            if(RShift_Notified)
+            {
+                Gui_Draw_Button_Box(320, 126, 10, 16, NULL, BUTTON_DISABLED);
+                RShift_Notified = FALSE;
+            }
+        }
     }
 }

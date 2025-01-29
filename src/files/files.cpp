@@ -31,7 +31,11 @@
 
 // ------------------------------------------------------
 // Includes
+#if !defined(BZR2)
 #include "../extralibs/zlib-1.2.3/zlib.h"
+#else
+#include "zlib.h"
+#endif
 
 #include "../include/ptk.h"
 #include "include/files.h"
@@ -41,6 +45,8 @@
 #include "include/303s.h"
 #include "include/synths.h"
 #include "include/ptps.h"
+
+#if !defined(BZR2)
 #include "../ui/include/misc_draw.h"
 #include "../samples/include/samples_pack.h"
 #include "../editors/include/editor_synth.h"
@@ -56,6 +62,7 @@
 #include "../editors/include/editor_track_fx.h"
 #include "../editors/include/editor_track.h"
 #include "../editors/include/editor_pattern.h"
+#endif
 
 #include "../../release/distrib/replay/lib/include/endianness.h"
 
@@ -81,11 +88,22 @@ int Final_Mod_Length;
 
 // ------------------------------------------------------
 // Functions
-int Read_Mod_Data(void *Datas, int Unit, int Length, FILE *Handle);
-int Read_Mod_Data_Swap(void *Datas, int Unit, int Length, FILE *Handle);
+#if !defined(BZR2)
+int Read_Mod_Data(void *Data, int Unit, int Length, FILE *Handle);
+int Read_Mod_Data_Swap(void *Data, int Unit, int Length, FILE *Handle);
 short *Unpack_Sample(FILE *FileHandle, int Dest_Length, char Pack_Type, int BitRate);
+#else
+int Read_Mod_Data(void *Data, int Unit, int Length, CustomFile &Handle);
+int Read_Mod_Data_Swap(void *Data, int Unit, int Length, CustomFile &Handle);
+short *Unpack_Sample(CustomFile &FileHandle, int Dest_Length, char Pack_Type, int BitRate);
+#endif
+
 void Swap_Short_Buffer(short *buffer, int size);
 short *Swap_New_Sample(short *buffer, int sample, int bank);
+
+#if defined(BZR2)
+char customPtkName[20] = { 0 };
+#endif
 
 // ------------------------------------------------------
 // Prepare the tracker interface once a module has been loaded
@@ -150,7 +168,11 @@ void Init_Tracker_Context_After_ModLoad(void)
 
 // ------------------------------------------------------
 // Load a module file
+#if !defined(BZR2)
 int Load_Ptk(char *FileName)
+#else
+int Load_Ptk(CustomFile customFile)
+#endif
 {
     int Ye_Old_Phony_Value;
     int New_adsr = FALSE;
@@ -167,6 +189,8 @@ int Load_Ptk(char *FileName)
     int Combine = FALSE;
     int Stereo_Reverb = FALSE;
     int Reverb_Resonance = FALSE;
+    int Reverb_Damp_On = FALSE;
+    int extended_LFO = FALSE;
     int Tb303_Scaling = FALSE;
     int Track_Srnd = FALSE;
     int Long_Midi_Prg = FALSE;
@@ -194,21 +218,33 @@ int Load_Ptk(char *FileName)
     int UnPacked_Size;
     int Flanger_Bug = FALSE;
     unsigned char *Packed_Module = NULL;
+
+#if !defined(BZR2)
     FILE *in;
+#else
+    auto &in = customFile;
+#endif
 
     Mod_Simulate = LOAD_READ;
     Mod_Mem_Pos = 0;
     Mod_Memory = NULL;
 
+#if !defined(BZR2)
     in = fopen(FileName, "rb");
+#endif
+
     Old_Ntk = FALSE;
     Ntk_Beta = FALSE;
 
+#if !defined(BZR2)
     if(in != NULL)
+#else
+    if(1)
+#endif
     {
 
 #if !defined(__WINAMP__)
-        Status_Box("Attempting To Load The Song File...");
+        Status_Box("Attempting To Load The Song File...", TRUE);
 #endif
 
         Song_Playing = FALSE;
@@ -219,6 +255,10 @@ int Load_Ptk(char *FileName)
 
         switch(extension[7])
         {
+            case 'T':
+                extended_LFO = TRUE;
+            case 'S':
+                Reverb_Damp_On = TRUE;
             case 'R':
                 Var_Disto = TRUE;
             case 'Q':
@@ -271,19 +311,19 @@ int Load_Ptk(char *FileName)
             case '3':
                 goto Read_Mod_File;
 
-            // Old noisetrekker
-            case '2':
-                Old_Ntk = TRUE;
-
             // Noisetrekker Beta (1.6)
             case '1':
                 Ntk_Beta = TRUE;
+
+                // Old noisetrekker
+            case '2':
+                Old_Ntk = TRUE;
         }
 
 Read_Mod_File:
 
 #if !defined(__WINAMP__)
-        Status_Box("Loading Song -> Header...");
+        Status_Box("Loading Song -> Header...", TRUE);
 #endif
         Free_Samples();
 
@@ -331,7 +371,12 @@ Read_Mod_File:
             }
         }
 
+#if !defined(BZR2)
         Read_Mod_Data(FileName, sizeof(char), 20, in);
+#else
+        Read_Mod_Data(customPtkName, sizeof(char), 20, in);
+#endif
+
         Read_Mod_Data(&nPatterns, sizeof(char), 1, in);
 
         Song_Tracks = MAX_TRACKS;
@@ -456,8 +501,9 @@ Read_Mod_File:
         }
 
 #if !defined(__WINAMP__)
-        Status_Box("Loading Song -> Sample Data...");
+        Status_Box("Loading Song -> Sample Data...", TRUE);
 #endif
+
         for(int swrite = 0; swrite < MAX_INSTRS; swrite++)
         {
             Read_Mod_Data(&nameins[swrite], sizeof(char), 20, in);
@@ -560,7 +606,7 @@ Read_Mod_File:
         }
 
 #if !defined(__WINAMP__)
-        Status_Box("Loading Song -> Track Info, Patterns And Sequences...");   
+        Status_Box("Loading Song -> Track Info, Patterns And Sequences...", TRUE);
 #endif
 
         Set_Default_Channels_Polyphony();
@@ -662,7 +708,13 @@ Read_Mod_File:
         {
             Read_Mod_Data(&LFO_ON[twrite], sizeof(char), 1, in);
             Read_Mod_Data_Swap(&LFO_RATE[twrite], sizeof(float), 1, in);
-            Read_Mod_Data_Swap(&LFO_AMPL[twrite], sizeof(float), 1, in);
+            Read_Mod_Data_Swap(&LFO_AMPL_FILTER[twrite], sizeof(float), 1, in);
+            if(extended_LFO)
+            {
+                Read_Mod_Data_Swap(&LFO_AMPL_VOLUME[twrite], sizeof(float), 1, in);
+                Read_Mod_Data_Swap(&LFO_AMPL_PANNING[twrite], sizeof(float), 1, in);
+                Read_Mod_Data_Swap(&LFO_RATE_SCALE[twrite], sizeof(float), 1, in);
+            }
         }
         for(twrite = 0; twrite < MAX_TRACKS; twrite++)
         {
@@ -720,6 +772,10 @@ Read_Mod_File:
             {
                 Read_Mod_Data(&Reverb_Stereo_Amount, sizeof(char), 1, in);
             }
+            if(Reverb_Damp_On)
+            {
+                Read_Mod_Data_Swap(&Reverb_Damp, sizeof(float), 1, in);
+            }
 
             for(i = 0; i < MAX_INSTRS; i++)
             {
@@ -728,7 +784,7 @@ Read_Mod_File:
 
             if(!Portable) Read_Mod_Data(&Ye_Old_Phony_Value, sizeof(char), 1, in);
 
-            // Read the 303 datas
+            // Read the 303 data
             for(j = 0; j < 2; j++)
             {
                 Read_Mod_Data(&tb303[j].enabled, sizeof(char), 1, in);
@@ -776,9 +832,19 @@ Read_Mod_File:
             }
             Read_Mod_Data_Swap(&tb303engine[0].tbVolume, sizeof(float), 1, in);
             Read_Mod_Data_Swap(&tb303engine[1].tbVolume, sizeof(float), 1, in);
+
+#if defined(BZR2)
+            if(in.pos > in.maxSize)
+            {
+                return(FALSE);
+            }
+#endif
+
         }
 
+#if !defined(BZR2)
         fclose(in);
+#endif
 
         if(!New_Reverb)
         {
@@ -790,7 +856,7 @@ Read_Mod_File:
         Init_Tracker_Context_After_ModLoad();
 
 #if !defined(__WINAMP__)
-        Status_Box("Module Loaded Successfully.");
+        Status_Box("Module Loaded Successfully.", TRUE);
 #endif
 
     }
@@ -798,7 +864,7 @@ Read_Mod_File:
     {
 
 #if !defined(__WINAMP__)
-        Status_Box("Module Loading Failed. (Possible Cause: File Not Found)");
+        Status_Box("Module Loading Failed. (Possible Cause: File Not Found)", TRUE);
 #endif
 
         return(FALSE);
@@ -814,12 +880,14 @@ Read_Mod_File:
 
 // ------------------------------------------------------
 // Load and decode a packed sample
+#if !defined(BZR2)
 short *Unpack_Sample(FILE *FileHandle, int Dest_Length, char Pack_Type, int BitRate)
+#else
+short *Unpack_Sample(CustomFile &FileHandle, int Dest_Length, char Pack_Type, int BitRate)
+#endif
 {
     int Packed_Length;
-
     short *Dest_Buffer;
-
     Uint8 *Packed_Read_Buffer;
 
     Read_Mod_Data(&Packed_Length, sizeof(int), 1, FileHandle);
@@ -932,7 +1000,7 @@ void Pack_Sample(FILE *FileHandle, short *Sample, int Size, char Pack_Type, int 
     {
         // Write the encoded length
         Write_Mod_Data(&PackedLen, sizeof(char), 4, FileHandle);
-        // Write the encoded datas
+        // Write the encoded data
         Write_Mod_Data(PackedSample, sizeof(char), PackedLen, FileHandle);
     }
     else
@@ -947,12 +1015,12 @@ void Pack_Sample(FILE *FileHandle, short *Sample, int Size, char Pack_Type, int 
 
 // ------------------------------------------------------
 // Write data into a module file
-int Write_Mod_Data(void *Datas, int Unit, int Length, FILE *Handle)
+int Write_Mod_Data(void *Data, int Unit, int Length, FILE *Handle)
 {
     switch(Mod_Simulate)
     {
         case SAVE_WRITE:
-            Write_Data(Datas, Unit, Length, Handle);
+            Write_Data(Data, Unit, Length, Handle);
             break;
 
         case SAVE_CALCLEN:
@@ -960,7 +1028,7 @@ int Write_Mod_Data(void *Datas, int Unit, int Length, FILE *Handle)
             break;
 
         case SAVE_WRITEMEM:
-            memcpy(Mod_Memory + Mod_Mem_Pos, Datas, Unit * Length);
+            memcpy(Mod_Memory + Mod_Mem_Pos, Data, Unit * Length);
             Mod_Mem_Pos += Unit * Length;
             break;
     }
@@ -969,7 +1037,7 @@ int Write_Mod_Data(void *Datas, int Unit, int Length, FILE *Handle)
 
 // ------------------------------------------------------
 // Write data into a module file (handling bytes swapping)
-int Write_Mod_Data_Swap(void *Datas, int Unit, int Length, FILE *Handle)
+int Write_Mod_Data_Swap(void *Data, int Unit, int Length, FILE *Handle)
 {
     short sswap_value;
     int iswap_value;
@@ -979,7 +1047,7 @@ int Write_Mod_Data_Swap(void *Datas, int Unit, int Length, FILE *Handle)
     switch(Mod_Simulate)
     {
         case SAVE_WRITE:
-            Write_Data_Swap(Datas, Unit, Length, Handle);
+            Write_Data_Swap(Data, Unit, Length, Handle);
             break;
 
         case SAVE_CALCLEN:
@@ -990,14 +1058,14 @@ int Write_Mod_Data_Swap(void *Datas, int Unit, int Length, FILE *Handle)
             switch(Unit)
             {
                 case 2:
-                    svalue = (short *) Datas;
+                    svalue = (short *) Data;
                     sswap_value = Swap_16(*svalue);
                     memcpy(Mod_Memory + Mod_Mem_Pos, &sswap_value, Unit * Length);
                     Mod_Mem_Pos += Unit * Length;
                     break;
 
                 case 4:
-                    ivalue = (int *) Datas;
+                    ivalue = (int *) Data;
                     iswap_value = Swap_32(*ivalue);
                     memcpy(Mod_Memory + Mod_Mem_Pos, &iswap_value, Unit * Length);
                     Mod_Mem_Pos += Unit * Length;
@@ -1015,16 +1083,20 @@ int Write_Mod_Data_Swap(void *Datas, int Unit, int Length, FILE *Handle)
 
 // ------------------------------------------------------
 // Read data from a module file
-int Read_Mod_Data(void *Datas, int Unit, int Length, FILE *Handle)
+#if !defined(BZR2)
+int Read_Mod_Data(void *Data, int Unit, int Length, FILE *Handle)
+#else
+int Read_Mod_Data(void *Data, int Unit, int Length, CustomFile &Handle)
+#endif
 {
     switch(Mod_Simulate)
     {
         case LOAD_READ:
-            Read_Data(Datas, Unit, Length, Handle);
+            Read_Data(Data, Unit, Length, Handle);
             break;
 
         case LOAD_READMEM:
-            memcpy(Datas, Mod_Memory + Mod_Mem_Pos, Unit * Length);
+            memcpy(Data, Mod_Memory + Mod_Mem_Pos, Unit * Length);
             Mod_Mem_Pos += Unit * Length;
             break;
     }
@@ -1033,7 +1105,11 @@ int Read_Mod_Data(void *Datas, int Unit, int Length, FILE *Handle)
 
 // ------------------------------------------------------
 // Read data from a module file
-int Read_Mod_Data_Swap(void *Datas, int Unit, int Length, FILE *Handle)
+#if !defined(BZR2)
+int Read_Mod_Data_Swap(void *Data, int Unit, int Length, FILE *Handle)
+#else
+int Read_Mod_Data_Swap(void *Data, int Unit, int Length, CustomFile &Handle)
+#endif
 {
     short svalue;
     int ivalue;
@@ -1041,7 +1117,7 @@ int Read_Mod_Data_Swap(void *Datas, int Unit, int Length, FILE *Handle)
     switch(Mod_Simulate)
     {
         case LOAD_READ:
-            Read_Data_Swap(Datas, Unit, Length, Handle);
+            Read_Data_Swap(Data, Unit, Length, Handle);
             break;
 
         case LOAD_READMEM:
@@ -1050,14 +1126,14 @@ int Read_Mod_Data_Swap(void *Datas, int Unit, int Length, FILE *Handle)
                 case 2:
                     memcpy(&svalue, Mod_Memory + Mod_Mem_Pos, Unit * Length);
                     svalue = Swap_16(svalue);
-                    *((short *) Datas) = (int) svalue;
+                    *((short *) Data) = (int) svalue;
                     Mod_Mem_Pos += Unit * Length;
                     break;
 
                 case 4:
                     memcpy(&ivalue, Mod_Memory + Mod_Mem_Pos, Unit * Length);
                     ivalue = Swap_32(ivalue);
-                    *((int *) Datas) = (int) ivalue;
+                    *((int *) Data) = (int) ivalue;
                     Mod_Mem_Pos += Unit * Length;
                     break;
 
@@ -1110,6 +1186,7 @@ int File_Exist_Req(char *Format, char *Directory, char *FileName)
 
 // ------------------------------------------------------
 // Return the size of an opened file
+#if !defined(BZR2)
 int Get_File_Size(FILE *Handle)
 {
     int File_Size;
@@ -1121,6 +1198,12 @@ int Get_File_Size(FILE *Handle)
     fseek(Handle, Current_Pos, SEEK_SET);
     return(File_Size);
 }
+#else
+int Get_File_Size(CustomFile &Handle)
+{
+    return int(Handle.maxSize);
+}
+#endif
 
 #if !defined(__WINAMP__)
 
@@ -1171,13 +1254,13 @@ int Save_Ptk(char *FileName, int NewFormat, int Simulate, Uint8 *Memory)
         if(NewFormat)
         {
             sprintf(Temph, "Saving '%s.ptp' Song In Modules Directory...", FileName);
-            Status_Box(Temph);
+            Status_Box(Temph, TRUE);
             sprintf(Temph, "%s" SLASH "%s.ptp", Dir_Mods, FileName);
         }
         else
         {
             sprintf(Temph, "Saving '%s.ptk' Song In Modules Directory...", FileName);
-            Status_Box(Temph);
+            Status_Box(Temph, TRUE);
             sprintf(Temph, "%s" SLASH "%s.ptk", Dir_Mods, FileName);
         }
         in = fopen(Temph, "wb");
@@ -1440,7 +1523,10 @@ int Save_Ptk(char *FileName, int NewFormat, int Simulate, Uint8 *Memory)
             {
                 Write_Mod_Data(&LFO_ON[twrite], sizeof(char), 1, in);
                 Write_Mod_Data_Swap(&LFO_RATE[twrite], sizeof(float), 1, in);
-                Write_Mod_Data_Swap(&LFO_AMPL[twrite], sizeof(float), 1, in);
+                Write_Mod_Data_Swap(&LFO_AMPL_FILTER[twrite], sizeof(float), 1, in);
+                Write_Mod_Data_Swap(&LFO_AMPL_VOLUME[twrite], sizeof(float), 1, in);
+                Write_Mod_Data_Swap(&LFO_AMPL_PANNING[twrite], sizeof(float), 1, in);
+                Write_Mod_Data_Swap(&LFO_RATE_SCALE[twrite], sizeof(float), 1, in);
             }
 
             for(twrite = 0; twrite < MAX_TRACKS; twrite++)
@@ -1480,6 +1566,8 @@ int Save_Ptk(char *FileName, int NewFormat, int Simulate, Uint8 *Memory)
             Write_Mod_Data_Swap(&Reverb_Filter_Cutoff, sizeof(float), 1, in);
             Write_Mod_Data_Swap(&Reverb_Filter_Resonance, sizeof(float), 1, in);
             Write_Mod_Data(&Reverb_Stereo_Amount, sizeof(char), 1, in);
+            Write_Mod_Data_Swap(&Reverb_Damp, sizeof(float), 1, in);
+            
             for(i = 0; i < MAX_INSTRS; i++)
             {
                 Write_Mod_Data_Swap(&Sample_Vol[i], sizeof(float), 1, in);
@@ -1533,14 +1621,14 @@ int Save_Ptk(char *FileName, int NewFormat, int Simulate, Uint8 *Memory)
                 {
                     sprintf(name, "Module '%s.ptk' Saved Successfully.", FileName);
                 }
-                Status_Box(name);
+                Status_Box(name, TRUE);
             }
         }
-        if(!Ok_Memory) Status_Box("Not Enough Memory.");
+        if(!Ok_Memory) Status_Box("Not Enough Memory.", TRUE);
     }
     else
     {
-        if(!Simulate) Status_Box("Module Saving Failed.");   
+        if(!Simulate) Status_Box("Module Saving Failed.", TRUE);
     }
 
     return(Mod_Length);
@@ -1666,7 +1754,7 @@ int Pack_Module(char *FileName)
     if(!strlen(FileName))
     {
         sprintf(name, "Can't Save A Module Without A Name...");
-        Status_Box(name);
+        Status_Box(name, TRUE);
         return(FALSE);
     }
 
@@ -1688,7 +1776,7 @@ int Pack_Module(char *FileName)
     output = fopen(Temph, "wb");
     if(output)
     {
-        sprintf(extension, "PROTREKR");
+        sprintf(extension, "PROTREKT");
         Write_Data(extension, sizeof(char), 9, output);
         Write_Data_Swap(&Depack_Size, sizeof(int), 1, output);
         Write_Data(Final_Mem_Out, sizeof(char), Len, output);
@@ -1703,7 +1791,7 @@ int Pack_Module(char *FileName)
     if(Final_Mem) free(Final_Mem);
 
     Clear_Input();
-    Status_Box(name);
+    Status_Box(name, TRUE);
     Read_SMPT();
     last_index = -1;
     Actualize_Files_List(0);
@@ -1752,6 +1840,7 @@ void Swap_Sample(short *buffer, int sample, int bank)
 #endif
 }
 
+#if !defined(__WINAMP__)
 // ------------------------------------------------------
 // Create a new buffer and switch the endianness of a sample
 short *Swap_New_Sample(short *buffer, int sample, int bank)
@@ -1835,17 +1924,29 @@ int Write_Data_Swap(void *value, int size, int amount, FILE *handle)
     }
     return(TRUE);
 }
+#endif
 
 // ------------------------------------------------------
 // Read data from a file
+#if !defined(BZR2)
 int Read_Data(void *value, int size, int amount, FILE *handle)
 {
     return(fread(value, size, amount, handle));
 }
+#else
+int Read_Data(void *value, int size, int amount, CustomFile &handle)
+{
+    return handle.Read(value, size, amount);
+}
+#endif
 
 // ------------------------------------------------------
 // Read data from a file taking care of the endianness
+#if !defined(BZR2)
 int Read_Data_Swap(void *value, int size, int amount, FILE *handle)
+#else
+int Read_Data_Swap(void *value, int size, int amount, CustomFile &handle)
+#endif
 {
     short svalue;
     int ivalue;
@@ -1885,7 +1986,7 @@ int Calc_Length(void)
     int l;
     int pos_patt;
     int patt_cmd[MAX_FX];
-    int patt_datas[MAX_FX];
+    int patt_data[MAX_FX];
     Uint8 *Cur_Patt;
     float Ticks = (float) Ticks_Per_Beat;
     float BPM = (float) Beats_Per_Min;
@@ -1928,7 +2029,7 @@ int Calc_Length(void)
                     for(l = 0; l < Channels_Effects[k]; l++)
                     {
                         patt_cmd[l] = Cur_Patt[PATTERN_FX + (l * 2)];
-                        patt_datas[l] = Cur_Patt[PATTERN_FXDATA + (l * 2)];
+                        patt_data[l] = Cur_Patt[PATTERN_FXDATA + (l * 2)];
                     }                    
 
                     for(l = 0; l < Channels_Effects[k]; l++)
@@ -1938,7 +2039,7 @@ int Calc_Length(void)
                             case 0x6:
                                 if(!already_in_loop)
                                 {
-                                    if(!patt_datas[l])
+                                    if(!patt_data[l])
                                     {
                                         rep_counter = -1;
                                         rep_pos = pos_patt;
@@ -1948,7 +2049,7 @@ int Calc_Length(void)
                                     {
                                         if(rep_counter == -1)
                                         {
-                                            rep_counter = (int) patt_datas[l];
+                                            rep_counter = (int) patt_data[l];
                                             pos_patt = rep_pos;
                                         }
                                         else
@@ -1971,26 +2072,26 @@ int Calc_Length(void)
                                 break;
 
                             case 0xd:
-                                if(patt_datas[l] < MAX_ROWS) have_break = patt_datas[l];
+                                if(patt_data[l] < MAX_ROWS) have_break = patt_data[l];
                                 break;
                         
                             case 0x1f:
                                 // Avoid looping the song when jumping
-                                if(i == (Song_Length - 1) || patt_datas[l] <= i)
+                                if(i == (Song_Length - 1) || patt_data[l] <= i)
                                 {
                                     early_exit = TRUE;
                                 }
-                                i = patt_datas[l];
+                                i = patt_data[l];
                                 // Was there a break already ?
                                 if(have_break >= MAX_ROWS) have_break = 0;
                                 break;
                         
                             case 0xf:
-                                Ticks = (float) patt_datas[l];
+                                Ticks = (float) patt_data[l];
                                 break;
     
                             case 0xf0:
-                                BPM = (float) patt_datas[l];
+                                BPM = (float) patt_data[l];
                                 break;
                         }
                     }

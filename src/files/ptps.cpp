@@ -230,6 +230,14 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     int Store_FX_SetFilterResonance = FALSE;
     int Store_FX_SetFilterType = FALSE;
     int Store_FX_ResetFilterLfo = FALSE;
+    
+    int Store_FX_SetLfoRate = FALSE;
+    int Store_FX_SetLfoScale = FALSE;
+    int Store_FX_SetFilterLfo = FALSE;
+    int Store_FX_SetVolumeLfo = FALSE;
+    int Store_FX_SetPanningLfo = FALSE;
+    
+    int Store_FX_SetLfoFrequency= FALSE;
     int Store_FX_AutoFadeIn = FALSE;
     int Store_FX_AutoFadeOut = FALSE;
     int Store_FX_VolumeSlideUp = FALSE;
@@ -245,9 +253,11 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     int Store_FX_FinePitchDown = FALSE;
     int Store_FX_SwitchFlanger = FALSE;
     int Store_FX_SwitchTrackLFO = FALSE;
+    int Store_FX_SwitchTrackCompression = FALSE;
     int Store_FX_Shuffle = FALSE;
     int Store_FX_RevCuto = FALSE;
     int Store_FX_RevReso = FALSE;
+    int Store_FX_RevDamp = FALSE;
 
     int Store_Synth = FALSE;
 
@@ -285,6 +295,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     int Store_Synth_WhiteNoise = FALSE;
     int Store_Synth_PinkNoise = FALSE;
 
+    int Empty_Fx = FALSE;
     int Number_Fx = 0;
     int Empty_Var = 0;
 
@@ -429,7 +440,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     {
         TmpPatterns_Rows = TmpPatterns + (pwrite * PATTERN_LEN);
         for(i = 0; i < PATTERN_BYTES; i++)
-        {   // Datas
+        {   // Data
             for(k = 0; k < Song_Tracks; k++)
             {   // Tracks
                 if(!Track_Is_Muted(k))
@@ -529,7 +540,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
             {
                 TmpPatterns_Rows = New_RawPatterns + (New_pSequence[l] * PATTERN_LEN);
                 for(i = 0; i < PATTERN_BYTES; i++)
-                {   // Datas
+                {   // Data
                     for(k = 0; k < Song_Tracks; k++)
                     {   // Tracks
                         if(!Track_Is_Muted(k))
@@ -569,7 +580,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
                 {
                     TmpPatterns_Rows = New_RawPatterns + (New_pSequence[l] * PATTERN_LEN);
                     for(i = 0; i < PATTERN_BYTES; i++)
-                    {   // Datas
+                    {   // Data
                         for(k = 0; k < Song_Tracks; k++)
                         {   // Tracks
                             if(!Track_Is_Muted(k))
@@ -621,7 +632,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     {
         TmpPatterns_Rows = TmpPatterns + (pwrite * PATTERN_LEN);
         for(i = 0; i < PATTERN_BYTES; i++)
-        {   // Datas
+        {   // Data
             for(k = 0; k < Song_Tracks; k++)
             {   // Tracks
                 if(!Track_Is_Muted(k))
@@ -647,12 +658,18 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
                             }
                         }
 
+                        Empty_Fx = FALSE;
                         // Check the effects column
                         if(Check_Range(i, Channels_Effects[k], PATTERN_FX))
                         {
                             switch(TmpPatterns_Notes[i])
                             {
-                                // $01 Pitch Up
+                                // $00 No Effect
+                                case 0x00:
+                                    Empty_Fx = TRUE;
+                                    break;
+
+                                    // $01 Pitch Up
                                 case 0x1:
                                     Store_FX_PitchUp = TRUE;
                                     break;
@@ -825,7 +842,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
                                     }
                                     break;
 
-                                // $16 Reset filter lfo
+                                // $16 Reset channel filter lfo
                                 case 0x16:
                                     Store_FX_ResetFilterLfo = TRUE;
                                     break;
@@ -922,10 +939,41 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
 
                                 // $29 Switch track compressor
                                 case 0x29:
-                                    if(TmpPatterns_Notes[i + 1] & TRUE)
+                                    // Check if the compressor is activated
+                                    if(TmpPatterns_Notes[i + 1])
                                     {
                                         Comp_Flag_Tracks = TRUE;
                                     }
+                                    break;
+
+                                // $2c Set reverb damp
+                                case 0x2C:
+                                    Store_FX_RevDamp = TRUE;
+                                    break;
+                                
+                                // $43 Set channel lfo frequency value
+                                case 0x43:
+                                    Store_FX_SetLfoRate = TRUE;
+                                    break;
+
+                                // $44 Set channel lfo multiplier value
+                                case 0x44:
+                                    Store_FX_SetLfoScale = TRUE;
+                                    break;
+
+                                // $45 Set channel filter lfo value
+                                case 0x45:
+                                    Store_FX_SetFilterLfo = TRUE;
+                                    break;
+
+                                // $46 Set channel volume lfo value
+                                case 0x46:
+                                    Store_FX_SetVolumeLfo = TRUE;
+                                    break;
+
+                                // $47 Set channel panning lfo value
+                                case 0x47:
+                                    Store_FX_SetPanningLfo = TRUE;
                                     break;
 
                                 // $31 First TB303 control
@@ -958,8 +1006,8 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
                             // Is it a legal fx data column ?
                             if(Check_Range(i, Channels_Effects[k], PATTERN_FXDATA))
                             {
-                                // Don't save Fx 7 datas
-                                if(TmpPatterns_Notes[i - 1] == 0x7)
+                                // Don't save Fx 7 data or non-zero data for empty an effect
+                                if(TmpPatterns_Notes[i - 1] == 0x7 || Empty_Fx)
                                 {
                                     Write_Mod_Data(&Empty_Var, sizeof(char), 1, in);
                                 }
@@ -1031,7 +1079,14 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
 
     Save_Constant("PTK_FX_0", Store_FX_PitchUp | Store_FX_PitchDown |
                               Store_FX_TranceSlicer |
-                              Store_FX_TranceGlider);
+                              Store_FX_TranceGlider |
+                              Store_FX_ResetFilterLfo |
+                              Store_FX_SetLfoRate |
+                              Store_FX_SetLfoScale |
+                              Store_FX_SetFilterLfo |
+                              Store_FX_SetVolumeLfo |
+                              Store_FX_SetPanningLfo
+                              );
 
     Save_Constant("PTK_FX_X", Store_FX_SetCutOff |
                               Store_FX_SetRandomCutOff |
@@ -1046,7 +1101,6 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
                               Store_FX_SetDistortionClamp |
                               Store_FX_SetFilterResonance |
                               Store_FX_SetFilterType |
-                              Store_FX_ResetFilterLfo |
                               Store_FX_AutoFadeIn |
                               Store_FX_AutoFadeOut |
                               Store_FX_VolumeSlideUp |
@@ -1080,6 +1134,13 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     Save_Constant("PTK_FX_SETFILTERRESONANCE", Store_FX_SetFilterResonance);
     Save_Constant("PTK_FX_SETFILTERTYPE", Store_FX_SetFilterType);
     Save_Constant("PTK_FX_RESETFILTERLFO", Store_FX_ResetFilterLfo);
+
+    Save_Constant("PTK_FX_SETLFORATE", Store_FX_SetLfoRate);
+    Save_Constant("PTK_FX_SETLFOSCALE", Store_FX_SetLfoScale);
+    Save_Constant("PTK_FX_SETFILTERLFO", Store_FX_SetFilterLfo);
+    Save_Constant("PTK_FX_SETVOLUMELFO", Store_FX_SetVolumeLfo);
+    Save_Constant("PTK_FX_SETPANNINGLFO", Store_FX_SetPanningLfo);
+    
     Save_Constant("PTK_FX_AUTOFADEIN", Store_FX_AutoFadeIn);
     Save_Constant("PTK_FX_AUTOFADEOUT", Store_FX_AutoFadeOut);
     Save_Constant("PTK_FX_AUTOFADEMODE", Store_FX_AutoFadeIn | Store_FX_AutoFadeOut);
@@ -1099,11 +1160,12 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
 
     Save_Constant("PTK_FX_SETREVCUTO", Store_FX_RevCuto);
     Save_Constant("PTK_FX_SETREVRESO", Store_FX_RevReso);
+    Save_Constant("PTK_FX_SETREVDAMP", Store_FX_RevDamp);
 
     // Special but only at tick 0
     Save_Constant("PTK_FX_TICK0", Store_FX_Vibrato | Store_FX_Arpeggio |
                                   Store_FX_PatternLoop | Store_FX_Reverse |
-                                  Store_FX_RevCuto | Store_FX_RevReso);
+                                  Store_FX_RevCuto | Store_FX_RevReso | Store_FX_RevDamp);
 
     // Remap the used instruments
     for(i = 0; i < MAX_INSTRS; i++)
@@ -1902,7 +1964,10 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
             {
                 Store_LFO = TRUE;
                 Write_Mod_Data(&LFO_RATE[twrite], sizeof(float), 1, in);
-                Write_Mod_Data(&LFO_AMPL[twrite], sizeof(float), 1, in);
+                Write_Mod_Data(&LFO_AMPL_FILTER[twrite], sizeof(float), 1, in);
+                Write_Mod_Data(&LFO_AMPL_VOLUME[twrite], sizeof(float), 1, in);
+                Write_Mod_Data(&LFO_AMPL_PANNING[twrite], sizeof(float), 1, in);
+                Write_Mod_Data(&LFO_RATE_SCALE[twrite], sizeof(float), 1, in);
             }
         }
     }
@@ -1954,6 +2019,7 @@ int Save_Ptp(FILE *in, int Simulate, char *FileName)
     Write_Mod_Data(&Reverb_Filter_Cutoff, sizeof(float), 1, in);
     Write_Mod_Data(&Reverb_Filter_Resonance, sizeof(float), 1, in);
     Write_Mod_Data(&Reverb_Stereo_Amount, sizeof(char), 1, in);
+    Write_Mod_Data(&Reverb_Damp, sizeof(float), 1, in);
 
     Write_Mod_Data(&Store_303_1, sizeof(char), 1, in);
     if(Store_303_1)

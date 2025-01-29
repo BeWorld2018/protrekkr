@@ -224,6 +224,7 @@ void Gui_Draw_Arrows_Number_Box2(int x, int y, int val, int flags);
 void value_box4(int x, int y, int val);
 void value_box3(int x, int y, char val, int flags);
 void Print_Long(int x, int y, int cant, int mode);
+void Print_Long_Tiny(int x, int y, int cant, int mode, int size_x, int size_y, int flags);
 void Print_Long_Small(int x, int y, int cant, int mode, int size, int flags);
 void outfloat(int x, int y, float cant, int mode);
 void outfloat_small(int x, int y, float cant, int mode, int size, int flags);
@@ -235,10 +236,11 @@ void Gui_Clear_Array(int x, int y, int sx, int sy);
 void bjbox(int x, int y, int sx, int sy);
 
 void Draw_Editors_Bar(int Highlight);
-void Status_Box(char const *str);
+void Status_Box(char const *str, int refresh);
 
 void Real_Slider(int x, int y, int val, int Enabled);
 void Real_Slider_Size(int x, int y, int size, int val, int Enabled);
+void Real_Slider_Tiny(int x, int y, int size_x, int size_y, int val, int Enabled);
 void Real_Slider_2(int x, int y, int val, int Enabled);
 int Slider_Get_Center(unsigned int Size, unsigned int Maximum, int Pixels);
 void Real_Slider_Horiz(int x, int y, int value, int displayed, int maximum, int size, int enable);
@@ -252,10 +254,13 @@ void blitlargenote(int x, int y, int note, int y1, int y2);
 void blitsmallnote(int x, int y, int note, int y1, int y2);
 void Note_Letter(int x, int y, char ltr, int ys, int y2);
 void Letter(int x, int y, char ltr, int ys, int y2);
+void Slider(int x, int y, int ltr, int col1, int y2, int larg, int scale_x, int col_back, int scale, int scale_y);
+void Slider_Pan(int x, int y, int ltr, int col1, int y2, int larg, int scale_x, int col_back, int scale, int scale_y);
 void Large_Letter(int x, int y, char ltr, int ys, int y2);
 void Small_Letter(int x, int y, char ltr, int ys, int y2);
 void Note_Large_Letter(int x, int y, char ltr, int ys, int y2);
 extern void (*Letter_Function)(int x, int y, char ltr, int ys, int y2);
+extern void (*Slider_Function)(int x, int y, int ltr, int ys, int y2, int larg, int col2, int col_back, int scale, int scale_y);
 
 void DrawPixel(int x, int y, int Color);
 void DrawHLine(int y, int x1, int x2, int Color);
@@ -271,7 +276,7 @@ void Copy_To_Surface(SDL_Surface *Source, SDL_Surface *dest,
 void Print_String(char *str, int x, int y, int size_x, int flag);
 int Get_Size_Text(char *String);
 SDL_Surface *Load_Picture(char *FileName);
-int Create_Font_Datas(char *FontName);
+int Create_Font_Data(char *FontName);
 void Set_Pictures_And_Palettes(int LogPalette);
 void Set_Main_Palette(void);
 void Set_Logo_Palette(void);
@@ -281,5 +286,9 @@ void Restore_Default_Palette(SDL_Color *Def, int DefBevel);
 void Destroy_UI(void);
 int Get_Font_Height(void);
 int Get_Note_Ascii(int note, char *snote, int *octave, int tiret);
+
+void Negate_Palette(void);
+void Rotate_Palette_Left(void);
+void Rotate_Palette_Right(void);
 
 #endif

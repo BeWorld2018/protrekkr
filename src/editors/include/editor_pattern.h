@@ -37,9 +37,11 @@
 #if defined(__GCC__)
 #include "../../include/variables.h"
 #include "../../ui/include/misc_draw.h"
-#else
+#elif !defined(BZR2)
 #include "../include/variables.h"
 #include "../ui/include/misc_draw.h"
+#else
+#include "../include/variables.h"
 #endif
 
 // ------------------------------------------------------
@@ -70,6 +72,12 @@ typedef struct
 {
     void (*Fnc)(int, int, char, int, int);
 } LETTER_FUNCTION, *LPLETTER_FUNCTION;
+
+typedef struct
+{
+    void (*Fnc)(int, int, int, int, int, int, int, int, int, int);
+    void (*Fnc_Pan)(int, int, int, int, int, int, int, int, int, int);
+} SLIDER_FUNCTION, *LPSLIDER_FUNCTION;
 
 typedef struct
 {

@@ -36,9 +36,15 @@
 // ------------------------------------------------------
 // Load the data of a synth instrument
 // (The new version (v4) use correct data aligment)
-void Read_Synth_Params(int (*Read_Function)(void *, int ,int, FILE *),
-                       int (*Read_Function_Swap)(void *, int ,int, FILE *),
+#if !defined(BZR2)
+void Read_Synth_Params(int (*Read_Function)(void *, int, int, FILE *),
+                       int (*Read_Function_Swap)(void *, int, int, FILE *),
                        FILE *in,
+#else
+void Read_Synth_Params(int (*Read_Function)(void *, int, int, CustomFile &),
+                       int (*Read_Function_Swap)(void *, int, int, CustomFile &),
+                       CustomFile &in,
+#endif
                        int idx,
                        int read_disto,
                        int read_lfo_adsr,
@@ -53,7 +59,7 @@ void Read_Synth_Params(int (*Read_Function)(void *, int ,int, FILE *),
     {
         if(read_disto && read_lfo_adsr)
         {
-            Read_Function(&PARASynth[idx], sizeof(Synth_Parameters), 1, in);
+            Read_Function(&PARASynth[idx], sizeof(Synth_Parameters) - 4, 1, in);
             PARASynth[idx].disto /= 2;
             PARASynth[idx].disto += 64;
             PARASynth[idx].glb_volume = 0x7f;
@@ -62,7 +68,7 @@ void Read_Synth_Params(int (*Read_Function)(void *, int ,int, FILE *),
         {
             if(read_disto)
             {
-                Read_Function(&PARASynth[idx], sizeof(Synth_Parameters) - 32, 1, in);
+                Read_Function(&PARASynth[idx], sizeof(Synth_Parameters) - 32 - 4, 1, in);
             }
             else
             {
@@ -155,7 +161,7 @@ void Read_Synth_Params(int (*Read_Function)(void *, int ,int, FILE *),
                 }
                 else
                 {
-                    Read_Function(&PARASynth[idx], sizeof(Synth_Parameters) - 4 - 32, 1, in);
+                    Read_Function(&PARASynth[idx], sizeof(Synth_Parameters) - 4 - 32 - 4, 1, in);
                 }
             }
         }
@@ -448,7 +454,7 @@ void Load_Synth(char *FileName)
                 break;
         }
 
-        Status_Box("Loading Synthesizer -> Structure...");
+        Status_Box("Loading Synthesizer -> Structure...", TRUE);
         Reset_Synth_Parameters(&PARASynth[Current_Instrument]);
 
         PARASynth[Current_Instrument].disto = 64;
@@ -479,12 +485,12 @@ void Load_Synth(char *FileName)
         Actualize_Instrument_Ed(0, 0);
         Actualize_DiskIO_Ed(0);
         Actualize_Pattern_Ed();
-        Status_Box("Synthesizer Program Loaded Successfully.");
+        Status_Box("Synthesizer Program Loaded Successfully.", TRUE);
         fclose(in);
     }
     else
     {
-        Status_Box("Synthesizer Program Loading Failed. (Possible Cause: File Not Found)");
+        Status_Box("Synthesizer Program Loading Failed. (Possible Cause: File Not Found)", TRUE);
     }
 }
 
@@ -498,7 +504,7 @@ void Save_Synth(void)
 
     sprintf(extension, "TWNNSYN5");
     sprintf (Temph, "Saving '%s.pts' Synthesizer Program In Presets Directory...", PARASynth[Current_Instrument].Preset_Name);
-    Status_Box(Temph);
+    Status_Box(Temph, TRUE);
 
     sprintf(Temph, "%s" SLASH "%s.pts", Dir_Presets, PARASynth[Current_Instrument].Preset_Name);
 
@@ -512,11 +518,11 @@ void Save_Synth(void)
         Read_SMPT();
         last_index = -1;
         Actualize_Files_List(0);
-        Status_Box("Synthesizer Program Saved Successfully."); 
+        Status_Box("Synthesizer Program Saved Successfully.", TRUE); 
     }
     else
     {
-        Status_Box("Synthesizer Program Saving Failed.");
+        Status_Box("Synthesizer Program Saving Failed.", TRUE);
     }
     Clear_Input();
 }

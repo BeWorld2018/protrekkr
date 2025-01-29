@@ -35,9 +35,15 @@
 
 // ------------------------------------------------------
 // Load the data from a reverb file (or a module)
-void Load_Reverb_Data(int (*Read_Function)(void *, int ,int, FILE *),
-                      int (*Read_Function_Swap)(void *, int ,int, FILE *),
+#if !defined(BZR2)
+void Load_Reverb_Data(int (*Read_Function)(void *, int, int, FILE *),
+                      int (*Read_Function_Swap)(void *, int, int, FILE *),
                       FILE *in, int New)
+#else
+void Load_Reverb_Data(int (*Read_Function)(void *, int, int, CustomFile &),
+                      int (*Read_Function_Swap)(void *, int, int, CustomFile &),
+                      CustomFile &in, int New)
+#endif
 {
     int i;
 
@@ -109,24 +115,24 @@ void Load_Reverb(char *FileName)
             }
 
             // Ok, extension matched!
-            Status_Box("Loading Reverb Data...");
+            Status_Box("Loading Reverb Data...", TRUE);
 
             Read_Data(Reverb_Name, sizeof(char), 20, in);
             Load_Reverb_Data(Read_Data, Read_Data_Swap, in, New_Reverb);
             Initreverb();
             Actualize_Reverb_Ed(0);
 
-            Status_Box("Reverb Data Loaded Successfully.");
+            Status_Box("Reverb Data Loaded Successfully.", TRUE);
         }
         else
         {
-            Status_Box("That File Is Not A " TITLE " Reverb File...");
+            Status_Box("That File Is Not A " TITLE " Reverb File...", TRUE);
         }
         fclose(in);
     }
     else
     {
-        Status_Box("Reverb Data Loading Failed. (Possible Cause: File Not Found)");
+        Status_Box("Reverb Data Loading Failed. (Possible Cause: File Not Found)", TRUE);
     }
 }
 
@@ -140,7 +146,7 @@ void Save_Reverb(void)
 
     sprintf(extension, "TWNNREV1");
     sprintf(Temph, "Saving '%s.prv' Data In Reverbs Directory...", Reverb_Name);
-    Status_Box(Temph);
+    Status_Box(Temph, TRUE);
     sprintf(Temph, "%s" SLASH "%s.prv", Dir_Reverbs, Reverb_Name);
 
     in = fopen(Temph, "wb");
@@ -155,11 +161,11 @@ void Save_Reverb(void)
         Read_SMPT();
         last_index = -1;
         Actualize_Files_List(0);
-        Status_Box("Reverb Data Saved Successfully.");   
+        Status_Box("Reverb Data Saved Successfully.", TRUE);
     }
     else
     {
-        Status_Box("Reverb Data Saving Failed.");
+        Status_Box("Reverb Data Saving Failed.", TRUE);
     }
 
     Clear_Input();

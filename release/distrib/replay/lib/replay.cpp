@@ -55,7 +55,10 @@
     extern SDL_sem *thread_sema;
 #endif
 
+void Compute_Stereo_Quick(int channel);
+
 int SamplesPerTick;
+float SQRT[1025];   // Sqrt float-precalculated table.
 
 #if !defined(__STAND_ALONE__) || defined(__WINAMP__)
     int Beats_Per_Min = 125;
@@ -96,8 +99,13 @@ int PosInTick_Delay;
 
 #if defined(PTK_LFO)
     float LFO_RATE[MAX_TRACKS];
-    float LFO_AMPL[MAX_TRACKS];
-    float LFOGR[MAX_TRACKS];
+    float LFO_RATE_SCALE[MAX_TRACKS];
+    float LFO_AMPL_FILTER[MAX_TRACKS];
+    float LFO_AMPL_VOLUME[MAX_TRACKS];
+    float LFO_AMPL_PANNING[MAX_TRACKS];
+    float LFO_CARRIER_FILTER[MAX_TRACKS];
+    float LFO_CARRIER_VOLUME[MAX_TRACKS];
+    float LFO_CARRIER_PANNING[MAX_TRACKS];
 #endif
 
 char FLANGER_ON[MAX_TRACKS];
@@ -118,7 +126,11 @@ char FLANGER_ON[MAX_TRACKS];
 #endif
 
 float sp_Cvol[MAX_TRACKS][MAX_POLYPHONY];
+float sp_Cvol_Ramp[MAX_TRACKS][MAX_POLYPHONY];
+float sp_Cvol_Ramp_Dest[MAX_TRACKS][MAX_POLYPHONY];
 float sp_Cvol_Synth[MAX_TRACKS][MAX_POLYPHONY];
+float sp_Cvol_Synth_Ramp[MAX_TRACKS][MAX_POLYPHONY];
+float sp_Cvol_Synth_Ramp_Dest[MAX_TRACKS][MAX_POLYPHONY];
 float sp_Tvol[MAX_TRACKS][MAX_POLYPHONY];
 float sp_Tvol_Synth[MAX_TRACKS][MAX_POLYPHONY];
 float sp_Tvol_Mod[MAX_TRACKS];
@@ -130,9 +142,7 @@ int64 Vstep1[MAX_TRACKS][MAX_POLYPHONY];
     int64 glidestep[MAX_TRACKS];
 #endif
 
-#if defined(PTK_TRACK_EQ)
 EQSTATE EqDat[MAX_TRACKS];
-#endif
 
 #if !defined(__STAND_ALONE__)
 float Default_Pan[MAX_TRACKS] =
@@ -149,6 +159,7 @@ float Default_Pan[MAX_TRACKS] =
 #endif
 
 float TPan[MAX_TRACKS];
+float old_TPan[MAX_TRACKS];
 int old_note[MAX_TRACKS][MAX_POLYPHONY];
 
 s_access sp_Position[MAX_TRACKS][MAX_POLYPHONY];
@@ -212,6 +223,8 @@ float left_float_render;
 float right_float_render;
 float left_chorus;
 float right_chorus;
+float left_reverb;
+float right_reverb;
 float delay_left_final;
 float delay_right_final;
 int PosInTick;
@@ -602,6 +615,7 @@ int Pattern_Line_Visual;
 
 int pl_note[MAX_POLYPHONY];
 int pl_sample[MAX_POLYPHONY];
+int old_pl_sample[MAX_TRACKS][MAX_POLYPHONY];
 int pl_vol_row;
 int pl_pan_row;
 unsigned char *RawPatterns;
@@ -751,7 +765,8 @@ short *RawSamples[MAX_INSTRS][2][MAX_INSTRS_SPLITS];
 
 #if defined(PTK_COMPRESSOR)
     int currentCounter;
-    int delayedCounter[10];
+    int delayedCounterL[10];
+    int delayedCounterR[10];
     float reverb_threshold_delay[] = 
     {
         44.1f, 50.1f, 60.1f, 70.1f, 73.1f, 79.1f, 64.0f, 55.0f, 20.0f, 32.0f
@@ -760,9 +775,10 @@ short *RawSamples[MAX_INSTRS][2][MAX_INSTRS_SPLITS];
     float allBuffer_R[10][5760];
     float delay_left_buffer[MAX_COMB_FILTERS][100000];
     float delay_right_buffer[MAX_COMB_FILTERS][100000];
+    float left_buffer[MAX_COMB_FILTERS][100000];
+    float right_buffer[MAX_COMB_FILTERS][100000];
     int counters_L[MAX_COMB_FILTERS];
     int counters_R[MAX_COMB_FILTERS];
-    int rev_counter;
     rFilter LFP_L;
     rFilter LFP_R;
     char num_echoes;
@@ -813,11 +829,13 @@ char compressor;
 #if !defined(__STAND_ALONE__) || defined(__WINAMP__)
     float Reverb_Filter_Cutoff = 0.08f;
     float Reverb_Filter_Resonance = 0.5f;
-    unsigned char Reverb_Stereo_Amount = 50;
+    unsigned char Reverb_Stereo_Amount = 63;
+    float Reverb_Damp = 1.0f;
 #else
     float Reverb_Filter_Cutoff;
     float Reverb_Filter_Resonance;
     unsigned char Reverb_Stereo_Amount;
+    float Reverb_Damp;
 #endif
 
 int Reserved_Sub_Channels[MAX_TRACKS][MAX_POLYPHONY];
@@ -854,14 +872,15 @@ int delay_time;
     int R_MaxLevel;
     extern int Chan_Midi_Prg[MAX_TRACKS];
     float *Scope_Dats[MAX_TRACKS];
+    float *Scope_Dats_L[MAX_TRACKS];
+    float *Scope_Dats_R[MAX_TRACKS];
     float *Scope_Dats_LeftRight[2];
-    float *VuMeters_Dats_L[MAX_TRACKS];
-    float *VuMeters_Dats_R[MAX_TRACKS];
     int pos_scope;
     int pos_scope_latency;
     extern signed char c_midiin;
     extern signed char c_midiout;
-    int plx;
+    int play_pattern;
+    int reset_carriers;
     int Midiprg[128];
     int LastProgram[MAX_TRACKS];
     int wait_level;
@@ -903,7 +922,9 @@ void Clear_Midi_Channels_Pool(void);
 
 // ------------------------------------------------------
 // Functions
-float Apply_Lfo(float cy, int trcy);
+float Apply_Lfo_To_Filter(float value, int channel);
+float Apply_Lfo_To_Volume(int channel);
+float Apply_Lfo_To_Panning(float value, int channel);
 void ComputeCoefs(int freq, int r, int t);
 void Record_Delay_Event();
 
@@ -950,12 +971,25 @@ void Initreverb(void);
 volatile int Done_Reset;
 void Reset_Values(void);
 
+// -----------------------------------------------------------------------------
+// Return the absolute value of a floating point
+// -----------------------------------------------------------------------------
+float absf(float x) 
+{
+    *(long *) &x &= 0x7fffffff;
+    return(x);
+}
+
 // ------------------------------------------------------
 // Audio mixer
+#if !defined(BZR2)
 void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
+#else
+Uint32 STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
+#endif
 {
 
-#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
+#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__) || defined(BZR2)
     float *pSamples_flt = (float *) Buffer;
 #endif
 
@@ -974,6 +1008,10 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
     }
 #endif
 
+#if defined(BZR2)
+    Uint32 numSamples = Len;
+#endif
+
 #if !defined(__STAND_ALONE__)
     if(!rawrender && Buffer)
     {
@@ -981,14 +1019,33 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
 
 #if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
         for(i = Len - 1; i >= 0; i -= 8)
+#elif defined(BZR2)
+        for(; numSamples; --numSamples)
 #else
         for(i = Len - 1; i >= 0; i -= 4)
 #endif
         {
+
+#if defined(BZR2)
+            if(!Song_Playing)
+            {
+                break;
+            }
+            if(done)
+            {
+                if(numSamples == Len)
+                {
+                    done = FALSE;
+                }
+                break;
+            }
+            
+#endif 
+
             Get_Player_Values();
 
 #if !defined(__STAND_ALONE__)
-            // Gather datas for the scopes and the vumeters
+            // Gather data for the scopes and the vumeters
             clamp_left_value = left_float * 32767.0f;
             clamp_right_value = right_float * 32767.0f;
 #endif
@@ -1024,7 +1081,7 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
 #endif
 #endif
 
-#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__)
+#if defined(__MACOSX_PPC__) || defined(__MACOSX_X86__) || defined (BZR2)
             *pSamples_flt++ = left_float;
             *pSamples_flt++ = right_float;
 #else
@@ -1037,8 +1094,8 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
             Scope_Dats_LeftRight[0][pos_scope] = clamp_left_value;
             Scope_Dats_LeftRight[1][pos_scope] = clamp_right_value;
 
-            clamp_left_value = fabsf(Scope_Dats_LeftRight[0][pos_scope_latency]);
-            clamp_right_value = fabsf(Scope_Dats_LeftRight[1][pos_scope_latency]);
+            clamp_left_value = absf(Scope_Dats_LeftRight[0][pos_scope_latency]);
+            clamp_right_value = absf(Scope_Dats_LeftRight[1][pos_scope_latency]);
             if(clamp_left_value > L_MaxLevel) L_MaxLevel = (int) clamp_left_value;
             if(clamp_right_value > R_MaxLevel) R_MaxLevel = (int) clamp_right_value;
             wait_level++;
@@ -1073,6 +1130,10 @@ void STDCALL Mixer(Uint8 *Buffer, Uint32 Len)
     {
         SDL_SemPost(thread_sema);
     }
+#endif
+
+#if defined(BZR2)
+    return Len - numSamples;
 #endif
 
 }
@@ -1195,6 +1256,12 @@ int STDCALL Ptk_InitDriver(void)
     for(i = 0; i < 360; i++)
     {
         SIN[i] = (float) sinf(i * 0.0174532f);
+    }
+
+    // Initializing work panning
+    for(i = 0; i < 1025; i++)
+    {
+        SQRT[i] = (float) sqrtf(i / 1024.0f);
     }
 
     #if defined(__STAND_ALONE__) && !defined(__WINAMP__)
@@ -1759,7 +1826,10 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
             if(LFO_ON[twrite])
             {
                 Mod_Dat_Read(&LFO_RATE[twrite], sizeof(float));
-                Mod_Dat_Read(&LFO_AMPL[twrite], sizeof(float));
+                Mod_Dat_Read(&LFO_AMPL_FILTER[twrite], sizeof(float));
+                Mod_Dat_Read(&LFO_AMPL_VOLUME[twrite], sizeof(float));
+                Mod_Dat_Read(&LFO_AMPL_PANNING[twrite], sizeof(float));
+                Mod_Dat_Read(&LFO_RATE_SCALE[twrite], sizeof(float));
 
             }
 #endif
@@ -1794,10 +1864,11 @@ int PTKEXPORT Ptk_InitModule(Uint8 *Module, int start_position)
         Mod_Dat_Read(&Reverb_Filter_Cutoff, sizeof(float));
         Mod_Dat_Read(&Reverb_Filter_Resonance, sizeof(float));
         Mod_Dat_Read(&Reverb_Stereo_Amount, sizeof(char));
+        Mod_Dat_Read(&Reverb_Damp, sizeof(float));
 
         char tb303_1_enabled;
         char tb303_2_enabled;
-        // Read the 303 datas
+        // Read the 303 data
         Mod_Dat_Read(&tb303_1_enabled, sizeof(char));
 
 #if defined(PTK_303)
@@ -1847,21 +1918,26 @@ void PTKEXPORT Ptk_ReleaseDriver(void)
 #if !defined(__STAND_ALONE__)
     for(i = 0; i < MAX_TRACKS; i++)
     {  
+        // ---
         if(Scope_Dats[i])
         {
             free(Scope_Dats[i]);
         }
         Scope_Dats[i] = NULL;
-        if(VuMeters_Dats_L[i])
+
+        // ---
+        if(Scope_Dats_L[i])
         {
-            free(VuMeters_Dats_L[i]);
+            free(Scope_Dats_L[i]);
         }
-        VuMeters_Dats_L[i] = NULL;
-        if(VuMeters_Dats_R[i])
+        Scope_Dats_L[i] = NULL;
+        
+        // ---
+        if(Scope_Dats_R[i])
         {
-            free(VuMeters_Dats_R[i]);
+            free(Scope_Dats_R[i]);
         }
-        VuMeters_Dats_R[i] = NULL;
+        Scope_Dats_R[i] = NULL;
     }
     if(Scope_Dats_LeftRight[0])
     {
@@ -1874,6 +1950,17 @@ void PTKEXPORT Ptk_ReleaseDriver(void)
     }
     Scope_Dats_LeftRight[1] = NULL;
 #endif
+
+#if defined(__STAND_ALONE__) && !defined(__WINAMP__)
+    // Free the patterns block
+#if defined(__PSVITA__)
+    if(RawPatterns) PSVITA_free(RawPatterns);
+#else
+    if(RawPatterns) free(RawPatterns);
+#endif
+    RawPatterns = NULL;
+#endif
+
 
 }
 
@@ -2121,16 +2208,6 @@ void PTKEXPORT Ptk_Stop(void)
     }
 #endif
 
-#if defined(__STAND_ALONE__) && !defined(__WINAMP__)
-    // Free the patterns block
-#if defined(__PSVITA__)
-    if(RawPatterns) PSVITA_free(RawPatterns);
-#else
-    if(RawPatterns) free(RawPatterns);
-#endif
-    RawPatterns = NULL;
-#endif
-
 }
 
 // ------------------------------------------------------
@@ -2159,9 +2236,7 @@ void Pre_Song_Init(void)
             Chan_Active_State[ini][i] = TRUE;
         }
 
-#if defined(PTK_TRACK_VOLUME)
         Track_Volume[ini] = 1.0f;
-#endif
 
         Track_Surround[ini] = FALSE;
 
@@ -2186,7 +2261,13 @@ void Pre_Song_Init(void)
 #if defined(PTK_LFO)
         LFO_ON[ini] = 0;
         LFO_RATE[ini] = 0.0001f;
-        LFO_AMPL[ini] = 0;
+        LFO_RATE_SCALE[ini] = 1.0f;
+        LFO_AMPL_FILTER[ini] = 0.0f;
+        LFO_AMPL_VOLUME[ini] = 0.0f;
+        LFO_AMPL_PANNING[ini] = 0.0f;
+        LFO_CARRIER_FILTER[ini] = 0.0f;
+        LFO_CARRIER_VOLUME[ini] = 0.0f;
+        LFO_CARRIER_PANNING[ini] = 0.0f;
 #endif
 
 #if !defined(__STAND_ALONE__)
@@ -2202,6 +2283,7 @@ void Pre_Song_Init(void)
         FLANGER_OFFSET[ini] = 8192;
 
         TPan[ini] = Default_Pan[ini];
+        old_TPan[ini] = TPan[ini];
         TCut[ini] = 126.0f;
         ICut[ini] = 0.0039062f;
         FType[ini] = 4;
@@ -2239,6 +2321,7 @@ void Pre_Song_Init(void)
 #endif
 
     Reverb_Filter_Resonance = 0.2f;
+    Reverb_Damp = 1.0f;
 
 #if defined(PTK_LIMITER_TRACKS)
     int j;
@@ -2274,7 +2357,7 @@ void Pre_Song_Init(void)
 }
 
 // ------------------------------------------------------
-// Init the replayer datas
+// Init the replayer data
 void Post_Song_Init(void)
 {
     int i;
@@ -2346,7 +2429,11 @@ void Post_Song_Init(void)
             Vstep1[i][j] = 0;
 
             sp_Cvol[i][j] = 0.0f;
+            sp_Cvol_Ramp[i][j] = 0.0f;
+            sp_Cvol_Ramp_Dest[i][j] = 10.0f;
             sp_Cvol_Synth[i][j] = 0.0f;
+            sp_Cvol_Synth_Ramp[i][j] = 0.0f;
+            sp_Cvol_Synth_Ramp_Dest[i][j] = 10.0f;
 
             sp_channelsample[i][j] = -1;
             sp_channelnote[i][j] = 120;
@@ -2357,6 +2444,7 @@ void Post_Song_Init(void)
 
         }
 
+        old_TPan[i] = TPan[i];
         sp_Tvol_Mod[i] = 1.0f;
 
         Player_FD[i] = 0.0f;
@@ -2401,6 +2489,19 @@ void Post_Song_Init(void)
 
 #if defined(PTK_FX_TRANCEGLIDER)
         glidestep[i] = 0;
+#endif
+
+#if defined(PTK_LFO)
+#if !defined(__STAND_ALONE__)
+        if(reset_carriers)
+        {
+#endif
+        LFO_CARRIER_FILTER[i] = 0.0f;
+        LFO_CARRIER_VOLUME[i] = 0.0f;
+        LFO_CARRIER_PANNING[i] = 0.0f;
+#if !defined(__STAND_ALONE__)
+        }
+#endif
 #endif
 
 #if defined(PTK_FLANGER)
@@ -2455,11 +2556,15 @@ void Post_Song_Init(void)
 #if defined(PTK_INSTRUMENTS)
             sp_Tvol[i][j] = 0.0f;
             sp_Cvol[i][j] = 0.0f;
+            sp_Cvol_Ramp[i][j] = 0.0f;
+            sp_Cvol_Ramp_Dest[i][j] = 10.0f;
 #endif
 
 #if defined(PTK_SYNTH)
             sp_Tvol_Synth[i][j] = 0.0f;
             sp_Cvol_Synth[i][j] = 0.0f;
+            sp_Cvol_Synth_Ramp[i][j] = 0.0f;
+            sp_Cvol_Synth_Ramp_Dest[i][j] = 10.0f;
 #endif
 
 
@@ -2712,6 +2817,10 @@ void Sp_Player(void)
                 {
                     pl_note[i] = *(RawPatterns + efactor + PATTERN_NOTE1 + (i * 2));
                     pl_sample[i] = *(RawPatterns + efactor + PATTERN_INSTR1 + (i * 2));
+                    if(pl_sample[i] != 255)
+                    {
+                        old_pl_sample[ct][i] = pl_sample[i];
+                    }
                 }
 
                 pl_vol_row = *(RawPatterns + efactor + PATTERN_VOLUME);
@@ -2760,7 +2869,6 @@ void Sp_Player(void)
                 if(pl_pan_row <= 128)
                 {
                     TPan[ct] = (float) pl_pan_row * 0.0078125f; 
-                    Compute_Stereo(ct);
 
 #if !defined(__STAND_ALONE__)
                     if(userscreen == USER_SCREEN_TRACK_EDIT)
@@ -3038,7 +3146,6 @@ void Sp_Player(void)
 #endif
 #endif
 
-
             // ------------------------------
             // Pattern movements
 
@@ -3053,7 +3160,6 @@ void Sp_Player(void)
             else
 #endif
             {
-
 
 #if defined(PTK_FX_PATTERNBREAK)
                 if(Patbreak_Line > 127)
@@ -3073,7 +3179,7 @@ void Sp_Player(void)
                     {
 
 #if !defined(__STAND_ALONE__)
-                        if(!plx)            // Playing a pattern or not ?
+                        if(!play_pattern)            // Playing a pattern or not ?
 #endif
                         {
 
@@ -3148,7 +3254,7 @@ void Sp_Player(void)
                     {
 
 #if !defined(__STAND_ALONE__)
-                        if(!plx)
+                        if(!play_pattern)
 #endif
                         {
 
@@ -3271,13 +3377,26 @@ void Sp_Player(void)
                 {
 ByPass_Wav:
 #endif
+                    if(sp_Stage[c][i] == PLAYING_SAMPLE_NOTEOFF && sp_Cvol[c][i] <= 0.02f)
+                    {
+                        sp_Stage[c][i] = PLAYING_NOSAMPLE;
+                    }
                     if(Cut_Stage[c][i])
                     {
                         // Volume ramping
                         if(sp_Cvol[c][i] > 0.0f)
                         {
-                            sp_Cvol[c][i] -= 0.01f;
-                            if(sp_Cvol[c][i] < 0.0f) sp_Cvol[c][i] = 0.0f;
+                            if(sp_Cvol_Ramp_Dest[c][i] != 0.0f)
+                            {
+                                sp_Cvol_Ramp[c][i] = (sp_Cvol[c][i] - 0.0f) / 48.0f;
+                                sp_Cvol_Ramp_Dest[c][i] = 0.0f;
+                            }
+                            sp_Cvol[c][i] -= sp_Cvol_Ramp[c][i];
+                            if(sp_Cvol[c][i] <= 0.0f)
+                            {
+                                sp_Cvol[c][i] = 0.0f;
+                                sp_Cvol_Ramp_Dest[c][i] = 10.0f;
+                            }
                         }
                     }
                     else
@@ -3286,24 +3405,49 @@ ByPass_Wav:
                         {
                             // Note Stop
                             sp_Tvol[c][i] = 0.0f;
-                            if(sp_Cvol[c][i] <= 0.0f) sp_Stage[c][i] = PLAYING_NOSAMPLE;
+                            sp_Cvol_Ramp_Dest[c][i] = 10.0f;
                         }
+
                         dest_volume = sp_Tvol[c][i] * sp_Tvol_Mod[c];
                         // Volume ramping
                         if(sp_Cvol[c][i] != dest_volume)
                         {
                             if(sp_Cvol[c][i] > dest_volume)
                             {
-                                sp_Cvol[c][i] -= 0.01f;
-                                if(sp_Cvol[c][i] < dest_volume) sp_Cvol[c][i] = dest_volume;
+                                if(sp_Cvol_Ramp_Dest[c][i] != dest_volume)
+                                {
+                                    sp_Cvol_Ramp[c][i] = (sp_Cvol[c][i] - dest_volume) / 48.0f;
+                                    sp_Cvol_Ramp_Dest[c][i] = dest_volume;
+                                }
+                                sp_Cvol[c][i] -= sp_Cvol_Ramp[c][i];
+                                if(sp_Cvol[c][i] <= dest_volume)
+                                {
+                                    sp_Cvol[c][i] = dest_volume;
+                                    sp_Cvol_Ramp_Dest[c][i] = 10.0f;
+                                }
                             }
                             else
                             {
-                                sp_Cvol[c][i] += 0.01f;
-                                if(sp_Cvol[c][i] > dest_volume) sp_Cvol[c][i] = dest_volume;
+                                if(sp_Cvol_Ramp_Dest[c][i] != dest_volume)
+                                {
+                                    sp_Cvol_Ramp[c][i] = (dest_volume - sp_Cvol[c][i]) / 48.0f;
+                                    sp_Cvol_Ramp_Dest[c][i] = dest_volume;
+                                }
+                                sp_Cvol[c][i] += sp_Cvol_Ramp[c][i];
+                                if(sp_Cvol[c][i] >= dest_volume)
+                                {
+                                    sp_Cvol[c][i] = dest_volume;
+                                    sp_Cvol_Ramp_Dest[c][i] = 10.0f;
+                                }
                             }
-                            if(sp_Cvol[c][i] > 1.0f) sp_Cvol[c][i] = 1.0f;
-                            if(sp_Cvol[c][i] < 0.0f) sp_Cvol[c][i] = 0.0f;
+                            if(sp_Cvol[c][i] > 1.0f)
+                            {
+                                sp_Cvol[c][i] = 1.0f;
+                            }
+                            if(sp_Cvol[c][i] < 0.0f)
+                            {
+                                sp_Cvol[c][i] = 0.0f;
+                            }
                         }
                     }
 
@@ -3424,13 +3568,31 @@ ByPass_Wav:
                Synthesizer[c][i].ENV_2_STAGE ||
                Cut_Stage[c][i])
             {
+                if(Synthesizer[c][i].ENV_1_STAGE == SYNTH_RELEASE && 
+                   Synthesizer[c][i].ENV_2_STAGE == SYNTH_RELEASE && 
+                   sp_Cvol_Synth[c][i] <= 0.02f)
+                {
+                    Synthesizer[c][i].ENV_1_STAGE = PLAYING_NOSAMPLE;
+                    Synthesizer[c][i].ENV_2_STAGE = PLAYING_NOSAMPLE;
+                    sp_Stage[c][i] = PLAYING_NOSAMPLE;
+                    sp_Stage2[c][i] = PLAYING_NOSAMPLE;
+                    sp_Stage3[c][i] = PLAYING_NOSAMPLE;
+                }
                 if(Cut_Stage[c][i])
                 {
                     // Volume ramping
                     if(sp_Cvol_Synth[c][i] > 0.0f)
                     {
-                        sp_Cvol_Synth[c][i] -= 0.01f;
-                        if(sp_Cvol_Synth[c][i] < 0.0f) sp_Cvol_Synth[c][i] = 0.0f;
+                        if(sp_Cvol_Synth_Ramp_Dest[c][i] != 0.0f)
+                        {
+                            sp_Cvol_Synth_Ramp[c][i] = (sp_Cvol_Synth[c][i] - 0.0f) / 48.0f;
+                            sp_Cvol_Synth_Ramp_Dest[c][i] = 0.0f;
+                        }
+                        sp_Cvol_Synth[c][i] -= sp_Cvol_Synth_Ramp[c][i];
+                        if(sp_Cvol_Synth[c][i] < 0.0f)
+                        {
+                            sp_Cvol_Synth[c][i] = 0.0f;
+                        }
                     }
                 }
                 else
@@ -3441,16 +3603,38 @@ ByPass_Wav:
                     {
                         if(sp_Cvol_Synth[c][i] > dest_volume)
                         {
-                            sp_Cvol_Synth[c][i] -= 0.01f;
-                            if(sp_Cvol_Synth[c][i] < dest_volume) sp_Cvol_Synth[c][i] = dest_volume;
+                            if(sp_Cvol_Synth_Ramp_Dest[c][i] != dest_volume)
+                            {
+                                sp_Cvol_Synth_Ramp[c][i] = (sp_Cvol_Synth[c][i] - dest_volume) / 48.0f;
+                                sp_Cvol_Synth_Ramp_Dest[c][i] = dest_volume;
+                            }
+                            sp_Cvol_Synth[c][i] -= sp_Cvol_Synth_Ramp[c][i];
+                            if(sp_Cvol_Synth[c][i] < dest_volume)
+                            {
+                                sp_Cvol_Synth[c][i] = dest_volume;
+                            }
                         }
                         else
                         {
-                            sp_Cvol_Synth[c][i] += 0.01f;
-                            if(sp_Cvol_Synth[c][i] > dest_volume) sp_Cvol_Synth[c][i] = dest_volume;
+                            if(sp_Cvol_Synth_Ramp_Dest[c][i] != dest_volume)
+                            {
+                                sp_Cvol_Synth_Ramp[c][i] = (dest_volume - sp_Cvol_Synth[c][i]) / 48.0f;
+                                sp_Cvol_Synth_Ramp_Dest[c][i] = dest_volume;
+                            }
+                            sp_Cvol_Synth[c][i] += sp_Cvol_Synth_Ramp[c][i];
+                            if(sp_Cvol_Synth[c][i] > dest_volume)
+                            {
+                                sp_Cvol_Synth[c][i] = dest_volume;
+                            }
                         }
-                        if(sp_Cvol_Synth[c][i] > 1.0f) sp_Cvol_Synth[c][i] = 1.0f;
-                        if(sp_Cvol_Synth[c][i] < 0.0f) sp_Cvol_Synth[c][i] = 0.0f;
+                        if(sp_Cvol_Synth[c][i] > 1.0f)
+                        {
+                            sp_Cvol_Synth[c][i] = 1.0f;
+                        }
+                        if(sp_Cvol_Synth[c][i] < 0.0f)
+                        {
+                            sp_Cvol_Synth[c][i] = 0.0f;
+                        }
                     }
                 }
 
@@ -3528,6 +3712,7 @@ ByPass_Wav:
                 if(sp_Stage[c][i] == PLAYING_SAMPLE)
                 {
                     sp_Stage[c][i] = PLAYING_SAMPLE_NOTEOFF;
+                    sp_Cvol_Ramp_Dest[c][i] = 10.0f;
                 }
 #endif
 
@@ -3577,7 +3762,7 @@ ByPass_Wav:
 
             if(dfi < -1.0f || dfi > 1.0f) CCut[c] += dfi * ICut[c];
 
-            realcut = Apply_Lfo(CCut[c] - ramper[c], c);
+            realcut = Apply_Lfo_To_Filter(CCut[c] - ramper[c], c);
 
             ramper[c] += Player_FD[c] * realcut * 0.015625f;
             gco = (int) realcut;
@@ -3775,7 +3960,10 @@ ByPass_Wav:
             }
 #endif
             // Duplicate the mono signal if necessary
-            if(!grown) All_Signal_R = All_Signal_L;
+            if(!grown)
+            {
+                All_Signal_R = All_Signal_L;
+            }
 
             // Dry Send
 #if defined(PTK_DISCLAP)
@@ -3882,6 +4070,12 @@ ByPass_Wav:
             All_Signal_R = Do_Equ(&EqDat[c], All_Signal_R, 1);
         }
 #endif
+        if(Track_Surround[c])
+        {
+            All_Signal_R = -All_Signal_R;
+        }
+
+        Compute_Stereo_Quick(c);
 
         All_Signal_L *= LVol[c];
         All_Signal_R *= RVol[c];
@@ -3915,15 +4109,15 @@ ByPass_Wav:
             }
         }
 
+#if defined(PTK_LFO)
+        All_Signal_L *= Apply_Lfo_To_Volume(c);
+        All_Signal_R *= Apply_Lfo_To_Volume(c);
+#endif
+
 #if defined(PTK_TRACK_VOLUME)
         All_Signal_L *= Track_Volume[c];
         All_Signal_R *= Track_Volume[c];
 #endif
-
-        if(Track_Surround[c])
-        {
-            All_Signal_R = -All_Signal_R;
-        }
 
         // Store to global signals
         left_float += All_Signal_L;
@@ -3953,15 +4147,13 @@ ByPass_Wav:
 #if !defined(__STAND_ALONE__)
         if(!Chan_Mute_State[c])
         {
-            Scope_Dats[c][pos_scope] = ((All_Signal_L + All_Signal_R) * 0.2f) * mas_vol;
-            VuMeters_Dats_L[c][pos_scope] = All_Signal_L * mas_vol;
-            VuMeters_Dats_R[c][pos_scope] = All_Signal_R * mas_vol;
+            Scope_Dats_L[c][pos_scope] = All_Signal_L / 32767.0f;
+            Scope_Dats_R[c][pos_scope] = All_Signal_R / 32767.0f;
         }
         else
         {
-            Scope_Dats[c][pos_scope] = 0.0f;
-            VuMeters_Dats_L[c][pos_scope] = 0.0f;
-            VuMeters_Dats_R[c][pos_scope] = 0.0f;
+            Scope_Dats_L[c][pos_scope] = 0.0f;
+            Scope_Dats_R[c][pos_scope] = 0.0f;
         }
 #endif
     } // Song_Tracks
@@ -3996,18 +4188,26 @@ int Get_Free_Sub_Channel(int channel, int polyphony)
         }
     }
 
-#if defined(PTK_INSTRUMENTS)
     for(i = 0; i < polyphony; i++)
     {
         if(!Cut_Stage[channel][i])
         {
-            if(sp_Stage[channel][i] == PLAYING_SAMPLE_NOTEOFF)
+            if(
+#if defined(PTK_INSTRUMENTS)
+               sp_Stage[channel][i] == PLAYING_SAMPLE_NOTEOFF
+#else
+               TRUE
+#endif
+#if defined(PTK_SYNTH)
+               && sp_Stage2[channel][i] == PLAYING_SAMPLE_NOTEOFF
+               && sp_Stage3[channel][i] == PLAYING_SAMPLE_NOTEOFF
+#endif
+              )
             {
                 return(i);
             }
         }
     }
-#endif
 
     // Take the oldest playing one
     oldest = 0;
@@ -4043,6 +4243,14 @@ void Schedule_Instrument(int channel,
     int Cur_Position = Song_Position;
     if(Chan_Active_State[Cur_Position][channel])
     {
+        if((Channels_MultiNotes[channel] - 1) <= sub_channel)
+        {
+            if(sample == 255)
+            {
+                sample = old_pl_sample[channel][midi_sub_channel - 1];
+            }
+
+        }
         // Nothing is already playing so play it directly
         old_note[channel][sub_channel] = inote;
         Instrument_Schedule_Dat[channel][sub_channel].start_backward = FALSE;
@@ -4061,6 +4269,8 @@ void Schedule_Instrument(int channel,
         Instrument_Schedule_Dat[channel][sub_channel].Play_Selection = Play_Selection;
         Instrument_Schedule_Dat[channel][sub_channel].midi_sub_channel = midi_sub_channel;
         Instrument_Schedule_Dat[channel][sub_channel].age = (Pos << 8) | Row;
+
+        sp_Cvol_Ramp_Dest[channel][sub_channel] = 10.0f;
 
         if(!glide)
         {
@@ -4240,7 +4450,9 @@ void Play_Instrument(int channel, int sub_channel)
 
             // Store the specified volume
             sp_Tvol[channel][sub_channel] = vol;
+            sp_Cvol_Ramp_Dest[channel][sub_channel] = 10.0f;
             sp_Tvol_Synth[channel][sub_channel] = vol_synth;
+            sp_Cvol_Synth_Ramp_Dest[channel][sub_channel] = 10.0f;
 
             double spreadnote = (double) POWF2(note2 / 12.0f);
             spreadnote *= 4294967296.0f;
@@ -4607,7 +4819,7 @@ void Do_Effects_Tick_0(void)
 {
 
 #if defined(PTK_FX_ARPEGGIO) || defined(PTK_FX_VIBRATO) || defined(PTK_FX_REVERSE) || defined(PTK_SHUFFLE) || \
-    defined(PTK_FX_SETREVCUTO) || defined(PTK_FX_SETREVRESO) || defined(PTK_LIMITER_TRACKS) || defined(PTK_FX_SETBPM) || \
+    defined(PTK_FX_SETREVCUTO) || defined(PTK_FX_SETREVRESO) || defined(PTK_FX_SETREVDAMP) || defined(PTK_LIMITER_TRACKS) || defined(PTK_FX_SETBPM) || \
     defined(PTK_FX_SETSPEED)
 
     int i;
@@ -4745,6 +4957,118 @@ void Do_Effects_Tick_0(void)
 #endif
 
                     break;
+#endif
+
+#if defined(PTK_FX_SETREVDAMP)
+                case 0x2c:
+                    Reverb_Damp = pltr_dat_row[j] / 255.0f * 1.0f;
+                    if(Reverb_Damp < 0.02f) Reverb_Damp = 0.02f;
+
+#if !defined(__STAND_ALONE__)
+                    if(userscreen == USER_SCREEN_FX_SETUP_EDIT)
+                    {
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_REVERB_DAMP;
+                    }
+#endif
+
+                    break;
+#endif
+
+#if defined(PTK_LFO)
+#if defined(PTK_FX_RESETFILTERLFO)
+                // $16 Set channel filter lfo carrier value
+                case 0x16:
+                    LFO_CARRIER_FILTER[trackef] = ((float) pltr_dat_row[j] / 255.0f) * 359.0f;
+                    LFO_CARRIER_VOLUME[trackef] = ((float) pltr_dat_row[j] / 255.0f) * 359.0f;
+                    LFO_CARRIER_PANNING[trackef] = ((float) pltr_dat_row[j] / 255.0f) * 359.0f;
+                    break;
+#endif
+#endif
+
+#if defined(PTK_LFO)
+#if defined(PTK_FX_SETLFORATE)
+                // $43 Set channel lfo frequency value
+                case 0x43:
+                    LFO_RATE[trackef] = ((float) pltr_dat_row[j] / 255.0f) * 0.0078125f;
+                    if(LFO_RATE[trackef] < 0.0001f) LFO_RATE[trackef] = 0.0001f;
+
+#if !defined(__STAND_ALONE__)
+                    if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
+                    {
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_LFO;
+                    }
+#endif
+                    
+                    break;
+#endif
+#endif
+
+#if defined(PTK_LFO)
+#if defined(PTK_FX_SETLFOSCALE)
+                // $44 Set channel lfo scale value
+                case 0x44:
+                    LFO_RATE_SCALE[trackef] = ((float) pltr_dat_row[j] / 255.0f) * 15.0f + 1.0f;
+
+#if !defined(__STAND_ALONE__)
+                    if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
+                    {
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_LFO;
+                    }
+#endif
+                    
+                    break;
+#endif
+#endif
+
+#if defined(PTK_LFO)
+#if defined(PTK_FX_SETFILTERLFO)
+                // $45 Set channel filter lfo value
+                case 0x45:
+                    LFO_AMPL_FILTER[trackef] = ((float) pltr_dat_row[j] / 255.0f) * 128.0f;
+
+#if !defined(__STAND_ALONE__)
+                    if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
+                    {
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_LFO;
+                    }
+#endif
+
+                    break;
+#endif
+#endif
+
+#if defined(PTK_LFO)
+#if defined(PTK_FX_SETVOLUMELFO)
+                // $46 Set channel volume lfo value
+                case 0x46:
+                    LFO_AMPL_VOLUME[trackef] = ((float) pltr_dat_row[j] / 255.0f) * 128.0f;
+
+#if !defined(__STAND_ALONE__)
+                    if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
+                    {
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_LFO;
+                    }
+#endif
+                    
+                    break;
+#endif
+#endif
+
+#if defined(PTK_LFO)
+#if defined(PTK_FX_SETPANNINGLFO)
+                // $47 Set channel panning lfo value
+                case 0x47:
+                    LFO_AMPL_PANNING[trackef] = ((float) pltr_dat_row[j] / 255.0f) * 128.0f;
+
+#if !defined(__STAND_ALONE__)
+                    if(userscreen == USER_SCREEN_TRACK_FX_EDIT)
+                    {
+                        gui_action_external |= GUI_UPDATE_EXTERNAL_LFO;
+                    }
+#endif
+                    
+                    break;
+#endif
 #endif
 
 #if defined(PTK_FX_SETBPM)
@@ -5375,15 +5699,6 @@ void Do_Effects_Ticks_X(void)
                     break;
 #endif
 
-#if defined(PTK_LFO)
-#if defined(PTK_FX_RESETFILTERLFO)
-                // $16 Set filter lfo value
-                case 0x16:
-                    LFOGR[trackef] = ((float) pltr_dat_row[k] / 255.0f) * 359.0f;
-                    break;
-#endif
-#endif
-
 #if defined(PTK_FX_AUTOFADEIN)
                 // $17 Auto fade in xx ticks
                 case 0x17:
@@ -5435,7 +5750,8 @@ void Do_Effects_Ticks_X(void)
                     local_mas_vol = pltr_dat_row[k] / 255.0f;
                     break;
 #endif
-            }
+
+        }
 
 #endif  // PTK_FX_X
 
@@ -5571,29 +5887,119 @@ void Reset_Filters(int tr)
 
 // ------------------------------------------------------
 // Process track filter LFO
-float Apply_Lfo(float cy, int trcy)
+float Apply_Lfo_To_Filter(float value, int channel)
 {
 
 #if defined(PTK_LFO)
-    if(LFO_ON[trcy] == 1)
+    if(LFO_ON[channel] == 1)
     {
-        cy += SIN[(int) (LFOGR[trcy])] * LFO_AMPL[trcy];
-        LFOGR[trcy] += LFO_RATE[trcy];
-        if(LFOGR[trcy] >= 360.0f) LFOGR[trcy] -= 360.0f;
+        if(LFO_AMPL_FILTER[channel] != 0.0f)
+        {
+            value += ((SIN[(int) (LFO_CARRIER_FILTER[channel])] + 1.0f) * 0.5f) * LFO_AMPL_FILTER[channel];
+        }
+        LFO_CARRIER_FILTER[channel] += LFO_RATE[channel] * LFO_RATE_SCALE[channel];
+        if(LFO_CARRIER_FILTER[channel] >= 360.0f) LFO_CARRIER_FILTER[channel] -= 360.0f;
     }
 #endif
 
-    if(cy < 1.0f) cy = 1.0f;
-    if(cy > 126.0f) cy = 126.0f;
-    return cy;
+    if(value < 1.0f) value = 1.0f;
+    if(value > 126.0f) value = 126.0f;
+    return value;
+}
+
+// ------------------------------------------------------
+// Process track volume LFO
+#if defined(PTK_LFO)
+float Apply_Lfo_To_Volume(int channel)
+{
+    float temp_value;
+    float value = 1.0f;
+
+    if(LFO_ON[channel] == 1)
+    {
+        if(LFO_AMPL_VOLUME[channel] != 0.0f)
+        {
+            temp_value = ((SIN[(int) (LFO_CARRIER_VOLUME[channel])] + 1.0f) * 0.5f) * LFO_AMPL_VOLUME[channel];
+            temp_value /= 128.0f;
+            value = 1.0f - temp_value;
+        }
+        LFO_CARRIER_VOLUME[channel] += LFO_RATE[channel] * LFO_RATE_SCALE[channel];
+        if(LFO_CARRIER_VOLUME[channel] >= 360.0f) LFO_CARRIER_VOLUME[channel] -= 360.0f;
+    }
+
+    if(value < 0.0f) value = 0.0f;
+    if(value > 1.0f) value = 1.0f;
+    return value;
+}
+#endif
+
+// ------------------------------------------------------
+// Process track panning LFO
+#if defined(PTK_LFO)
+float Apply_Lfo_To_Panning(float value, int channel)
+{
+    float temp_value;
+
+    // [-0.5f..0.5f]
+    value -= 0.5f;
+    // [-1.0f..1.0f]
+    value *= 2.0f;
+    temp_value = SIN[(int) (LFO_CARRIER_PANNING[channel])] * LFO_AMPL_PANNING[channel];
+    temp_value /= 128.0f;
+    value *= temp_value;
+    // [-0.5f..0.5f]
+    value *= 0.5f;
+    // [0.0f..1.0f]
+    value += 0.5f;
+
+    if(value < 0.0f) value = 0.0f;
+    if(value > 1.0f) value = 1.0f;
+    return value;
+}
+#endif
+
+// ------------------------------------------------------
+// Set stereo panning only when necessary
+void Compute_Stereo_Quick(int channel)
+{
+    float pan_value;
+    int changed = FALSE;
+
+    pan_value = TPan[channel];
+    if(old_TPan[channel] != TPan[channel])
+    {
+        old_TPan[channel] = TPan[channel];
+        changed = TRUE;
+    }
+
+#if defined(PTK_LFO)
+    if(LFO_ON[channel] == 1)
+    {
+        // Check if not 'Off'
+        if(LFO_AMPL_PANNING[channel] != 0.0f)
+        {
+            pan_value = Apply_Lfo_To_Panning(pan_value, channel);
+            LFO_CARRIER_PANNING[channel] += LFO_RATE[channel] * LFO_RATE_SCALE[channel];
+            if(LFO_CARRIER_PANNING[channel] >= 360.0f) LFO_CARRIER_PANNING[channel] -= 360.0f;
+            changed = TRUE;
+        }
+    }
+#endif
+
+    if(changed)
+    {
+        Old_LVol[channel] = SQRT[(int) ((1.0f - pan_value) * 1024.0f)];
+        Old_RVol[channel] = SQRT[(int) (pan_value * 1024.0f)];
+    }
+
 }
 
 // ------------------------------------------------------
 // Set stereo panning
 void Compute_Stereo(int channel)
 {
-    Old_LVol[channel] = sqrtf(1.0f - TPan[channel]);
-    Old_RVol[channel] = sqrtf(TPan[channel]);
+    Old_LVol[channel] = SQRT[(int) ((1.0f - TPan[channel]) * 1024.0f)];
+    Old_RVol[channel] = SQRT[(int) (TPan[channel] * 1024.0f)];
 }
 
 // ------------------------------------------------------
@@ -5608,8 +6014,19 @@ void Fix_Stereo(int channel)
 // Main mixing routine
 void Get_Player_Values(void)
 {
+#if !defined(__STAND_ALONE__)
+    int c;
+#endif
+    
+    float left_compress;
+    float right_compress;
+
     left_chorus = 0.0f;
     right_chorus = 0.0f;
+    left_reverb = 0.0f;
+    right_reverb = 0.0f;
+    left_compress = 1.0f;
+    right_compress = 1.0f;
 
 #if defined(PTK_LIMITER_MASTER) || defined(PTK_LIMITER_TRACKS)
     mas_comp_pos_rms_buffer++;
@@ -5644,9 +6061,13 @@ void Get_Player_Values(void)
     float lchore = rbuff_chorus[rchorus_counter2];
     left_float += lchore;
     right_float += rchore;
+    lchore /= 32767.0f;
+    rchore /= 32767.0f;
 
 #if defined(PTK_COMPRESSOR)
     Reverb_work();
+    left_float += left_reverb;
+    right_float += right_reverb;
 #endif
     
     left_float /= 32767.0f;
@@ -5660,8 +6081,10 @@ void Get_Player_Values(void)
     if(mas_ratio_Master > 0.01f)
     {
 #endif
-        left_float = Mas_Compressor_Master(left_float, &rms_sumL_Master, mas_comp_bufferL_Master, &mas_envL_Master);
-        right_float = Mas_Compressor_Master(right_float, &rms_sumR_Master, mas_comp_bufferR_Master, &mas_envR_Master);
+        left_compress = Mas_Compressor_Master(left_float, &rms_sumL_Master, mas_comp_bufferL_Master, &mas_envL_Master);
+        right_compress = Mas_Compressor_Master(right_float, &rms_sumR_Master, mas_comp_bufferR_Master, &mas_envR_Master);
+        left_float *= left_compress; 
+        right_float *= right_compress; 
     }
 #endif
 
@@ -5704,6 +6127,49 @@ void Get_Player_Values(void)
 #if !defined(__STAND_ALONE__)
     left_float_render = left_float;
     right_float_render = right_float;
+#endif
+
+#if !defined(__STAND_ALONE__)
+
+#if defined(PTK_COMPRESSOR)
+    left_reverb /= 32767.0f;
+    right_reverb /= 32767.0f;
+#endif
+
+    // Store the data for the tracks scopes now
+    for(c = 0; c < Song_Tracks; c++)
+    {
+        if(!Chan_Mute_State[c])
+        {
+            Scope_Dats_L[c][pos_scope] = ((((Scope_Dats_L[c][pos_scope]// + lchore
+#if defined(PTK_COMPRESSOR)
+//                                         + left_reverb
+#endif
+                                         ) * left_compress
+                                         ) * mas_vol
+                                         ) * local_curr_mas_vol
+                                         ) * local_curr_ramp_vol;
+
+            Scope_Dats_R[c][pos_scope] = ((((Scope_Dats_R[c][pos_scope] //+ rchore
+#if defined(PTK_COMPRESSOR)
+//                                         + right_reverb
+#endif
+                                         ) * right_compress
+                                         ) * mas_vol
+                                         ) * local_curr_mas_vol
+                                         ) * local_curr_ramp_vol;
+
+            Scope_Dats[c][pos_scope] = (Scope_Dats_L[c][pos_scope] + Scope_Dats_R[c][pos_scope]) * 1.2f;
+        }
+        else
+        {
+            Scope_Dats_L[c][pos_scope] = 0.0f;
+            Scope_Dats_R[c][pos_scope] = 0.0f;
+            Scope_Dats[c][pos_scope] = 0.0f;
+        }
+
+
+    }
 #endif
 
     left_value = (int) (left_float * 32767.0f);
@@ -5985,7 +6451,7 @@ float int_filter2p(int stereo, int ch, float input, float f, float q, float q2)
 {
     q *= 0.0787401f;
     input = filter2px(stereo, ch, input, f, q2);
-    return float(32767.0f * POWF(fabsf(input) / 32767.0f, 1.0f - q / 11.0f));
+    return float(32767.0f * POWF(absf(input) / 32767.0f, 1.0f - q / 11.0f));
 }
 
 float filter2px(int stereo, int ch, float input, float f, float q)
@@ -6656,14 +7122,16 @@ void Initreverb(void)
     {
         memset(delay_left_buffer[i], 0, 100000 * sizeof(float));
         memset(delay_right_buffer[i], 0, 100000 * sizeof(float));
+        memset(left_buffer[i], 0, 100000 * sizeof(float));
+        memset(right_buffer[i], 0, 100000 * sizeof(float));
     }
 
-    for(i = 0; i < num_echoes; i++)
+    for(i = 0; i < MAX_COMB_FILTERS; i++)
     {
         mlrw = 99999 - (delays[i] * 4 * 2);
         if(mlrw < 0) mlrw += 100000;
         counters_L[i] = mlrw;
-        mlrw = 99999 - ((delays[i] + (Reverb_Stereo_Amount * 2)) * 4 * 2);
+        mlrw = 99999 - ((delays[i] + (Reverb_Stereo_Amount * 12)) * 4 * 2);
         if(mlrw < 0) mlrw += 100000;
         counters_R[i] = mlrw;
     }
@@ -6673,7 +7141,6 @@ void Initreverb(void)
     LFP_L.Reset();
     LFP_R.Reset();
 
-    rev_counter = 99999;
 }
 
 void Init_Reverb_Filter(void)
@@ -6686,9 +7153,12 @@ void Init_Reverb_Filter(void)
     {
         memset(allBuffer_L[i], 0, 5760 * sizeof(float));
         memset(allBuffer_R[i], 0, 5760 * sizeof(float));
-        delayedCounter[i] = 5759 - int(c_threshold * reverb_threshold_delay[i]);
-        if(delayedCounter[i] < 0) delayedCounter[i] += 5760;
-        if(delayedCounter[i] > 5759) delayedCounter[i] -= 5759;
+        delayedCounterL[i] = 5759 - int(c_threshold * reverb_threshold_delay[i]);
+        if(delayedCounterL[i] < 0) delayedCounterL[i] += 5760;
+        if(delayedCounterL[i] > 5759) delayedCounterL[i] -= 5759;
+        delayedCounterR[i] = 5759 - int(c_threshold * reverb_threshold_delay[i] + ((float) Reverb_Stereo_Amount * 12));
+        if(delayedCounterR[i] < 0) delayedCounterR[i] += 5760;
+        if(delayedCounterR[i] > 5759) delayedCounterR[i] -= 5759;
     }
 }
 
@@ -6708,38 +7178,55 @@ void Reverb_work(void)
     {
         float l_rout = 0.0f;
         float r_rout = 0.0f;
+        float dev_l;
+        float dev_r;
+        float nev_l;
+        float nev_r;
 
-        // Comb filter
+        // Comb filters
         for(i = 0; i < num_echoes; i++)
         {
-            delay_left_buffer[i][rev_counter] = (delay_left_final +
-                                                 delay_left_buffer[i][counters_L[i]]) *
-                                                 decays[i];
-            delay_right_buffer[i][rev_counter] = (delay_right_final +
-                                                 delay_right_buffer[i][counters_R[i]]) *
-                                                 decays[i];
-            l_rout += delay_left_buffer[i][counters_L[i]];
-            r_rout += delay_right_buffer[i][counters_R[i]];
+            dev_l = (delay_left_buffer[i][counters_L[i]] * decays[i]);
+            dev_r = (delay_right_buffer[i][counters_R[i]] * decays[i]);
+            if(i & 1)
+            {
+                nev_l = dev_l - delay_left_final;
+                nev_r = dev_r - delay_right_final;
+            }
+            else
+            {
+                nev_l = dev_l + delay_left_final;
+                nev_r = dev_r + delay_right_final;
+            }
+            nev_l *= Reverb_Damp;
+            nev_r *= Reverb_Damp;
+
             if(++counters_L[i] > 99999) counters_L[i] -= 99999;
             if(++counters_R[i] > 99999) counters_R[i] -= 99999;
+            delay_left_buffer[i][counters_L[i]] = nev_l;
+            delay_right_buffer[i][counters_R[i]] = nev_r;
+            l_rout += nev_l;
+            r_rout += nev_r;
         }
 
+        // All pass filters
+        for(i = 0; i < num_echoes; i++)
+        {
+            l_rout = allpass_filter(allBuffer_L[i], l_rout, delayedCounterL[i]);
+            r_rout = allpass_filter(allBuffer_R[i], r_rout, delayedCounterR[i]);
+            if(++delayedCounterL[i] > 5759) delayedCounterL[i] -= 5759;
+            if(++delayedCounterR[i] > 5759) delayedCounterR[i] -= 5759;
+        }
+
+        // Lopass
         l_rout = LFP_L.fWork(l_rout, Reverb_Filter_Cutoff, Reverb_Filter_Resonance);
         r_rout = LFP_R.fWork(r_rout, Reverb_Filter_Cutoff, Reverb_Filter_Resonance);
 
-        // All pass filters
-        for(i = 0; i < 10; i++)
-        {
-            l_rout = allpass_filter(allBuffer_L[i], l_rout, delayedCounter[i]);
-            r_rout = allpass_filter(allBuffer_R[i], r_rout, delayedCounter[i]);
-            if(++delayedCounter[i] > 5759) delayedCounter[i] -= 5759;
-        }
-        left_float += l_rout;
-        right_float += r_rout;
+        left_reverb = l_rout;
+        right_reverb = r_rout;
 
         // Updating current counters
         if(++currentCounter > 5759) currentCounter -= 5759;
-        if(++rev_counter > 99999) rev_counter -= 99999;
     }
 }
 #endif
@@ -6880,7 +7367,7 @@ float Mas_Compressor_Master(float input, float *rms_sum, float *buffer, float *e
     {
         gain = expf((FastLog(mas_threshold_Master) - FastLog(*env)) * mas_ratio_Master);
     }
-    return input * gain;
+    return gain;
 }
 #endif // PTK_LIMITER_MASTER
 
@@ -7021,6 +7508,11 @@ float Process_Sample(short *Data, int c, int i, unsigned int res_dec)
 }
 
 #if defined(USE_FASTPOW)
+void ToFloat(int *dest, int val)
+{
+    *dest = val;
+}
+
 #if defined(__PSP__)
 float FastPow2(float x)
 {
@@ -7033,41 +7525,7 @@ float FastPow2(float x)
 	: "=r"(result) : "r"(x));
 	return result;
 }
-void ToFloat(int *dest, int val)
-{
-    *dest = val;
-}
-float FastLog(float i)
-{
-	float x;
-	float y;
-	x = (float) (*(int *) &i);
-	x *= 1.0f / (1 << 23);
-	x = x - 127;
-	y = x - floorf(x);
-	y = (y - y * y) * 0.346607f;
-	return x + y;
-}
-float FastPow(float a, float b)
-{
-    return FastPow2(b * FastLog(a));
-}
 #else
-void ToFloat(int *dest, int val)
-{
-    *dest = val;
-}
-float FastLog(float i)
-{
-	float x;
-	float y;
-	x = (float) (*(int *) &i);
-	x *= 1.0f / (1 << 23);
-	x = x - 127;
-	y = x - floorf(x);
-	y = (y - y * y) * 0.346607f;
-	return x + y;
-}
 float FastPow2(float i)
 {
 	float x;
@@ -7078,11 +7536,23 @@ float FastPow2(float i)
 	ToFloat((int *) &x, (int) x);
     return x;
 }
+#endif
+
+float FastLog(float i)
+{
+	float x;
+	float y;
+	x = (float) (*(int *) &i);
+	x *= 1.0f / (1 << 23);
+	x = x - 127;
+	y = x - floorf(x);
+	y = (y - y * y) * 0.346607f;
+	return x + y;
+}
 float FastPow(float a, float b)
 {
     return FastPow2(b * FastLog(a));
 }
-#endif
 #endif
 
 #if defined(PTK_TRACK_EQ)

@@ -37,7 +37,7 @@
 #include "../include/ptk.h"
 
 #include "include/midi.h"
-#include "include/RtMidi.h"
+#include "include/rtmidi.h"
 #include "include/midi_dispatch.h"
 
 // ------------------------------------------------------
@@ -97,8 +97,8 @@ void Midi_CallBackIn(double deltatime,
 {
     int Midi_Channel_Number;
     int Midi_Command;
-    int Midi_Datas_1;
-    int Midi_Datas_2;
+    int Midi_Data_1;
+    int Midi_Data_2;
     int Midi_Velocity;
     int Instrument_Number; 
     int tmp_note;
@@ -137,10 +137,10 @@ void Midi_CallBackIn(double deltatime,
             is_editing = TRUE;
             L_MaxLevel = 0;
             R_MaxLevel = 0;
-            Switch_Cmd_Playing(FALSE);
             Pattern_Line_Visual = Pattern_Line;
             key_record_first_time = FALSE;
             old_key_Pattern_Line = Pattern_Line_Visual;
+            Notify_Edit();
             Clear_Midi_Channels_Pool();
             player_pos = -1;
             metronome_rows_counter = 0;
@@ -153,15 +153,15 @@ void Midi_CallBackIn(double deltatime,
     {
         // Pitch bend (not handled yet).
         case 0xe0:
-            Midi_Datas_1 = (Param1 >> 8) & 0xff;
-            Midi_Datas_2 = (Param1 >> 16) & 0xff;
+            Midi_Data_1 = (Param1 >> 8) & 0xff;
+            Midi_Data_2 = (Param1 >> 16) & 0xff;
             break;
 
         // Control Change
         case 0xb0:
-            Midi_Datas_1 = (Param1 >> 8) & 0xff;
-            Midi_Datas_2 = (Param1 >> 16) & 0xff;
-            Dispatch_Midi_Msg(Midi_Datas_1, Midi_Datas_2);
+            Midi_Data_1 = (Param1 >> 8) & 0xff;
+            Midi_Data_2 = (Param1 >> 16) & 0xff;
+            Dispatch_Midi_Msg(Midi_Data_1, Midi_Data_2);
             break;
 
         // Program Change
@@ -321,18 +321,18 @@ void Midi_InitIn(void)
                 midiin->openPort(c_midiin);
                 midiin->setCallback(&Midi_CallBackIn);
                 midiin->ignoreTypes(1, 1, 1);
-                if(midiin_changed == 1) Status_Box("Midi In Device Activated.");
+                if(midiin_changed == 1) Status_Box("Midi In Device Activated.", TRUE);
                 midiin_port_opened = TRUE;
             }
             catch(...)
             {
-                Status_Box("Midi In Device Failed To Open.");
+                Status_Box("Midi In Device Failed To Open.", TRUE);
             }
         }
         else
         {
             Midi_CloseIn();
-            if(midiin_changed == 1) Status_Box("Midi In Device Disconnected.");
+            if(midiin_changed == 1) Status_Box("Midi In Device Disconnected.", TRUE);
         }
         midiin_changed = 0;
     }
@@ -365,17 +365,17 @@ void Midi_InitOut(void)
             try
             {
                 midiout->openPort(c_midiout);
-                if(midiout_changed == 1) Status_Box("Midi Out Device Activated.");
+                if(midiout_changed == 1) Status_Box("Midi Out Device Activated.", TRUE);
             }
             catch(...)
             {
-                Status_Box("Midi Out Device Failed To Open.");
+                Status_Box("Midi Out Device Failed To Open.", TRUE);
             }
         }
         else
         {
             Midi_CloseOut();
-            if(midiout_changed == 1) Status_Box("Midi Out Device Disconnected.");
+            if(midiout_changed == 1) Status_Box("Midi Out Device Disconnected.", TRUE);
         }
         midiout_changed = 0;
     }

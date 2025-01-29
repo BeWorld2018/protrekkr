@@ -36,9 +36,11 @@
 
 // ------------------------------------------------------
 // Includes
+#if !defined(BZR2)
 #include <SDL/SDL.h>
 
 #include "../support/include/main.h"
+#endif
 #include "../../release/distrib/replay/lib/include/replay.h"
 
 // ------------------------------------------------------
@@ -204,6 +206,9 @@
 #define GUI_CMD_INSERT_TRACK 156
 #define GUI_CMD_DELETE_TRACK 157
 
+#define GUI_CMD_GOTO_START_POSITION 158
+#define GUI_CMD_GOTO_END_POSITION 159
+
 #define GUI_CMD_RENDER_WAV 169
 
 #define GUI_CMD_REDUCE_POSITIONS_10 170
@@ -246,6 +251,7 @@
 #define GUI_UPDATE_EXTERNAL_FLANGER (1 << 8)
 #define GUI_UPDATE_EXTERNAL_LFO (1 << 9)
 #define GUI_UPDATE_EXTERNAL_SET_PANNING (1 << 10)
+#define GUI_UPDATE_EXTERNAL_REVERB_DAMP (1 << 11)
 
 #define GUI_UPDATE_EXTERNAL_303_1_CUTOFF (1 << 0)
 #define GUI_UPDATE_EXTERNAL_303_2_CUTOFF (1 << 1)
@@ -407,16 +413,21 @@ extern char Current_Instrument_Split;
 extern int resty;
 extern int rs_coef;
 
+#if !defined(BZR2)
 extern SDL_Surface *Main_Screen;
+#endif
+
 extern int CONSOLE_HEIGHT2;
 
 extern float left_float_render;
 extern float right_float_render;
 
+#if !defined(BZR2)
 extern SDL_Surface *PFONT;
 extern SDL_Surface *PFONT_DOUBLE;
 extern SDL_Surface *FONT;
 extern SDL_Surface *FONT_LOW;
+#endif
 
 extern int gui_action;
 extern int gui_action_external;
@@ -424,7 +435,9 @@ extern int gui_action_external_303;
 extern int gui_action_metronome;
 extern char teac;
 
+#if !defined(BZR2)
 extern MOUSE Mouse;
+#endif
 
 extern int fluzy;
 
@@ -471,12 +484,14 @@ extern unsigned int SamplesPerSub;
 extern char sas;
 
 extern float *Scope_Dats[MAX_TRACKS];
+extern float *Scope_Dats_L[MAX_TRACKS];
+extern float *Scope_Dats_R[MAX_TRACKS];
 extern float *Scope_Dats_LeftRight[2];
-extern float *VuMeters_Dats_L[MAX_TRACKS];
-extern float *VuMeters_Dats_R[MAX_TRACKS];
 
+#if !defined(BZR2)
 extern SDL_Surface *SKIN303;
 extern SDL_Surface *LOGOPIC;
+#endif
 
 extern int MouseWheel_Multiplier;
 extern char Rows_Decimal;
@@ -495,6 +510,8 @@ extern int allow_save;
 extern char Channels_Polyphony[MAX_TRACKS];
 extern char Channels_MultiNotes[MAX_TRACKS];
 extern char Channels_Effects[MAX_TRACKS];
+
+extern int can_modify_song;
 
 // ------------------------------------------------------
 // Functions
@@ -528,7 +545,7 @@ void guiDial2(const char *str);
 void out_decchar(int x, int y, int number, char smith);
 
 void out_nibble(int x, int y, int color, int number);
-void Song_Play(void);
+void Song_Play();
 void Song_Stop(void);
 void Free_Samples(void);
 void Draw_Pattern(int track, int line, int petrack, int row);
@@ -551,7 +568,9 @@ float Filter(int stereo, float x, char i);
 float Cutoff(int v);
 float Reonance(float v);
 float Bandwidth(int v);
-float Apply_Lfo(float cy, char trcy);
+float Apply_Lfo_To_Filter(float value, int channel);
+float Apply_Lfo_To_Volume(int channel);
+float Apply_Lfo_To_Panning(float value, int channel);
 int Get_Free_Wave(void);
 char Check_Mouse_No_Button(int x, int y, int xs, int ys);
 char Check_Mouse(int x, int y, int xs, int ys);
@@ -559,6 +578,7 @@ char Check_Mouse(int x, int y, int xs, int ys);
 void Init_Synth_Params_Names(void);
 void UpSynth(int peac,int number);
 void Compute_Stereo(int channel);
+void Compute_Stereo_Quick(int channel);
 void Fix_Stereo(int channel);
 void Keyboard_Handler(void);
 void Mouse_Handler(void);
@@ -567,7 +587,9 @@ int Get_Line_Over_Mouse(int *Need_Scroll);
 int Get_Column_Over_Mouse(int *track, int *column,
                           int check_boundaries,
                           int *Was_Scrolling,
-                          int Left);
+                          int Left,
+                          int *Column_Pos,
+                          int *Line);
 void Set_Track_Slider(int pos);
 #define BLOCK_MARK_TRACKS 1
 #define BLOCK_MARK_ROWS 2
@@ -590,7 +612,7 @@ void Select_Block_Keyboard(int Type);
 void Calc_selection(void);
 int Next_Line_Pattern_Auto(int *position, int lines, int *line);
 int Get_Free_Midi_Sub_Channel(int track);
-int Search_Corresponding_Midi_Sub_Channel(int track, Uint32 Datas);
+int Search_Corresponding_Midi_Sub_Channel(int track, Uint32 Data);
 int Get_Midi_Channel(int midi_channel);
 void Draw_Scope_Files_Button(void);
 
@@ -604,7 +626,7 @@ void Draw_Scope(void);
 int Init_Scopes_VuMeters_Buffers(void);
 
 void Remove_Title(void);
-void Switch_Cmd_Playing(int Enable);
+void Switch_Cmd_Playing(void);
 
 void Lock_Audio_Thread(void);
 void Unlock_Audio_Thread(void);

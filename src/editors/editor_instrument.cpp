@@ -707,7 +707,7 @@ void Mouse_Left_Instrument_Ed(void)
         {
             if(!(sed_real_range_end - sed_real_range_start))
             {
-                Status_Box("This Sample Doesn't Have Any Selected Section To Export.");
+                Status_Box("This Sample Doesn't Have Any Selected Section To Export.", TRUE);
             }
             else
             {
@@ -736,7 +736,7 @@ void Mouse_Left_Instrument_Ed(void)
         {
             if(!LoopType[Current_Instrument][Current_Instrument_Split])
             {
-                Status_Box("This Sample Doesn't Have Any Loop Section To Export.");
+                Status_Box("This Sample Doesn't Have Any Loop Section To Export.", TRUE);
             }
             else
             {
@@ -1237,6 +1237,8 @@ void Dump_Instruments_Synths_List(int xr, int yr)
 
             SetColor(COL_BACKGROUND);
             bjbox(xr - 1, yr + 1, Cur_Width - 412, 137);
+            SetColor(COL_BLACK);
+            bjbox(Cur_Width - 19, yr + 1, 1, 137);
 
             for(int counter = 0; counter < 11; counter++)
             {
@@ -1247,7 +1249,7 @@ void Dump_Instruments_Synths_List(int xr, int yr)
                     if(Instrs_index + counter == Current_Instrument)
                     {
                         SetColor(COL_PUSHED_MED);
-                        bjbox(xr - 1, yr + (counter * 12) + 1, Cur_Width - 413, 12);
+                        bjbox(xr, yr + (counter * 12) + 2, Cur_Width - 415, 11);
                     }
 
                     switch(Scopish)
@@ -1267,12 +1269,12 @@ void Dump_Instruments_Synths_List(int xr, int yr)
                             if(Nbr_Splits) Font = USE_FONT;
 
                             sprintf(Line, "%.2x:", rel_val);
-                            PrintString(xr, yr + (counter * 12), Font, Line);
+                            PrintString(xr + 1, yr + (counter * 12), Font, Line);
                             sprintf(Line, "%s", nameins[rel_val]);
-                            PrintString(xr + 18, yr + (counter * 12), Font, Line);
+                            PrintString(xr + 19, yr + (counter * 12), Font, Line);
         
                             sprintf(Line, "%s", nameins[rel_val]);
-                            PrintString(xr + 18, yr + (counter * 12), Font, Line);
+                            PrintString(xr + 19, yr + (counter * 12), Font, Line);
                             switch(Nbr_Splits)
                             {
                                 case 0:
@@ -1370,10 +1372,10 @@ void Dump_Instruments_Synths_List(int xr, int yr)
                             }
                             
                             sprintf(Line, "%.2x:", rel_val);
-                            PrintString(xr, yr + (counter * 12), Font, Line);
+                            PrintString(xr + 1, yr + (counter * 12), Font, Line);
 
                             sprintf(Line, "%s", PARASynth[rel_val].Preset_Name);
-                            PrintString(xr + 18, yr + (counter * 12), Font, Line);
+                            PrintString(xr + 19, yr + (counter * 12), Font, Line);
 
                             int instr_to_search = Synthprg[rel_val];
                             if(instr_to_search == 0)
