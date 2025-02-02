@@ -78,12 +78,7 @@ static OSStatus AUDIO_Callback(AudioDeviceID device,
     }
     else
     {
-        unsigned int i;
-        char *pSamples = (char *) data_out->mBuffers[0].mData;
-        for(i = 0; i < data_out->mBuffers[0].mDataByteSize; i++)
-        {
-            pSamples[i] = 0;
-        }
+        memset(data_out->mBuffers[0].mData, 0, data_out->mBuffers[0].mDataByteSize);
     }
     AUDIO_Samples += data_out->mBuffers[0].mDataByteSize;
     AUDIO_Timer = ((((float) AUDIO_Samples) * (1.0f / (float) AUDIO_Latency)) * 1000.0f);
@@ -182,7 +177,7 @@ int AUDIO_Create_Sound_Buffer(int milliseconds)
         Desc.mBytesPerPacket = Desc.mBytesPerFrame * Desc.mFramesPerPacket;
 
 #if defined(__BIG_ENDIAN__)
-            Desc.mFormatFlags |= kLinearPCMFormatFlagIsBigEndian;
+        Desc.mFormatFlags |= kLinearPCMFormatFlagIsBigEndian;
 #endif
 
         if(AudioDeviceSetProperty(AUDIO_Device,

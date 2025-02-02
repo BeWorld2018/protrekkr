@@ -2,8 +2,8 @@ CXX = g++ -mcrt=newlib
 
 LIBS = -lSDL -lz -lpthread -lunix
 
-FLAGS = -Ofast -w -fno-strict-aliasing -fomit-frame-pointer -ffast-math -fno-rtti -fno-exceptions -Lsrc/extralibs/sdl_draw -Lsrc/extralibs/zlib-1.2.3 \
-        -D __AMIGAOS4__ -D __GCC__ -D __BIG_ENDIAN__ -D __MOT_SWAP__ -D __NO_MIDI__
+FLAGS = -Ofast -w -mcpu=440fp -fno-strict-aliasing -fomit-frame-pointer -ffast-math -fno-rtti -fno-exceptions -Lsrc/extralibs/sdl_draw -Lsrc/extralibs/zlib-1.2.3 \
+        -D USE_SDL_THREADS -D __AMIGAOS4__ -D __GCC__ -D __BIG_ENDIAN__ -D __MOT_SWAP__ -D __NO_MIDI__
 
 CXXFLAGS = $(FLAGS)
 
@@ -32,6 +32,7 @@ RemObj:
 	-rm -f $(EXEOBJS)
 
 protrekkr: $(EXEOBJS)
+	-rm -f ./release/distrib/ptk_aos4
 	$(CXX) -o ./release/distrib/ptk_aos4 -L./ $(FLAGS) $(EXEOBJS) $(LIBS)
 	strip -R.comment ./release/distrib/ptk_aos4
 

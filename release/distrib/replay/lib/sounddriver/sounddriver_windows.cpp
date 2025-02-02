@@ -66,7 +66,12 @@ DWORD AUDIO_ThreadId;
 HANDLE AUDIO_hReplayThread;
 
 int AUDIO_Latency;
+
+#if defined(__AMIGAOS4__)
+int AUDIO_Milliseconds = 20;
+#else
 int AUDIO_Milliseconds = 10;
+#endif
 
 // ------------------------------------------------------
 // Functions
@@ -102,17 +107,8 @@ DWORD WINAPI AUDIO_Thread(LPVOID lpParameter)
             }
             else
             {
-                unsigned int i;
-                char *pSamples = (char *) AUDIO_Audio_Ptr1;
-                for(i = 0; i < AUDIO_Audio_Bytes1; i++)
-                {
-                    pSamples[i] = 0;
-                }
-                pSamples = (char *) AUDIO_Audio_Ptr2;
-                for(i = 0; i < AUDIO_Audio_Bytes2; i++)
-                {
-                    pSamples[i] = 0;
-                }
+                memset(AUDIO_Audio_Ptr1, 0, AUDIO_Audio_Bytes1);
+                memset(AUDIO_Audio_Ptr2, 0, AUDIO_Audio_Bytes2);
                 AUDIO_Acknowledge = TRUE;
             }
 
