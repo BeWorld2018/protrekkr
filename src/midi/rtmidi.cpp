@@ -919,7 +919,7 @@ void RtMidiOut :: sendMessage(std::vector<unsigned char> *message)
     // 64K, so we may need to break long sysex messages into pieces and
     // send via separate lists.
     unsigned int nBytes = message->size();
-    
+        
     if(nBytes == 0)
     {
         sprintf(errorString_, "RtMidiOut::sendMessage: no data in message argument!");
@@ -930,25 +930,28 @@ void RtMidiOut :: sendMessage(std::vector<unsigned char> *message)
     MIDITimeStamp timeStamp = AudioGetCurrentHostTime();
     CoreMidiData *data = static_cast<CoreMidiData *> (apiData_);
     OSStatus result;
-
     ByteCount bufsize = nBytes > 65535 ? 65535 : nBytes;
-    Byte buffer[bufsize + 16]; // pad for other struct members
+    unsigned char buffer[bufsize + 1024]; // pad for other struct members
+    unsigned char midi_data[nBytes + 16];
     ByteCount listSize = sizeof(buffer);
     MIDIPacketList *packetList = (MIDIPacketList *) buffer;
   
     ByteCount remainingBytes = nBytes;
 
+    for(unsigned int i = 0; i < nBytes; i++)
+    {
+        midi_data[i] = message->at(i);
+    }
+
     while(remainingBytes)
     {
         MIDIPacket *packet = MIDIPacketListInit(packetList);
-        
         // A MIDIPacketList can only contain a maximum of 64K of data, so if our message is longer,
         // break it up into chunks of 64K or less and send out as a MIDIPacketList with only one
         // MIDIPacket. Here, we reuse the memory allocated above on the stack for all.
         ByteCount bytesForPacket = remainingBytes > 65535 ? 65535 : remainingBytes;
-        const Byte *dataStartPtr = (const Byte *) &message[nBytes - remainingBytes];
-        packet = MIDIPacketListAdd(packetList, listSize, packet, timeStamp, bytesForPacket, dataStartPtr);
-        remainingBytes -= bytesForPacket;
+
+        packet = MIDIPacketListAdd(packetList, listSize, packet, timeStamp, bytesForPacket, midi_data + (nBytes - remainingBytes));
 
         if(!packet)
         {
@@ -978,6 +981,8 @@ void RtMidiOut :: sendMessage(std::vector<unsigned char> *message)
                 error(RtError::WARNING);
             }
         }
+
+        remainingBytes -= bytesForPacket;
     }
 }
 
@@ -1013,7 +1018,7 @@ void RtMidiOut :: sendMessage(std::vector<unsigned char> *message)
 struct AlsaMidiData
 {
     snd_seq_t *seq;
-    unsigned int portNum;
+    unsigned int client_id;
     int vport;
     snd_seq_port_subscribe_t *subscription;
     snd_midi_event_t *coder;
@@ -1248,7 +1253,7 @@ extern "C" void *alsaMidiHandler(void *ptr)
     {
         free(buffer);
     }
-    snd_midi_event_free( apiData->coder );
+    snd_midi_event_free(apiData->coder);
     apiData->coder = 0;
     apiData->thread = apiData->dummy_thread_id;
     return 0;
@@ -1276,14 +1281,14 @@ void RtMidiIn :: initialize(char *clientName)
     // Save our api-specific connection information.
     AlsaMidiData *data = (AlsaMidiData *) new AlsaMidiData;
     data->seq = seq;
-    data->portNum = -1;
+    data->bufferSize = 32;
+    data->client_id = -1;
     data->vport = -1;
     data->subscription = 0;
     data->dummy_thread_id = pthread_self();
     data->thread = data->dummy_thread_id;
     data->trigger_fds[0] = -1;
     data->trigger_fds[1] = -1;
-    data->bufferSize = inputData_.bufferSize;
   
     apiData_ = (void *) data;
     inputData_.apiData = (void *) data;
@@ -1410,11 +1415,13 @@ void RtMidiIn :: openPort(unsigned int portNumber, char *portName)
                                    SND_SEQ_PORT_TYPE_MIDI_GENERIC |
                                    SND_SEQ_PORT_TYPE_APPLICATION);
         snd_seq_port_info_set_midi_channels(pinfo, 16);
+
 #ifndef AVOID_TIMESTAMPING
         snd_seq_port_info_set_timestamping(pinfo, 1);
         snd_seq_port_info_set_timestamp_real(pinfo, 1);    
         snd_seq_port_info_set_timestamp_queue(pinfo, data->queue_id);
 #endif
+
         snd_seq_port_info_set_name(pinfo, portName);
         data->vport = snd_seq_create_port(data->seq, pinfo);
   
@@ -1639,10 +1646,6 @@ std::string RtMidiIn :: getPortName(unsigned int portNumber, char *Name)
         std::ostringstream os;
         os << snd_seq_client_info_get_name(cinfo);
         os << ":";
-        os << snd_seq_port_info_get_name(pinfo);
-        os << " ";                                      // These lines added to make sure devices are listed
-        os << snd_seq_port_info_get_client(pinfo);      // with full portnames added to ensure individual device names
-        os << ":";
         os << snd_seq_port_info_get_port(pinfo);
         std::string stringName = os.str();
         strcpy(Name, stringName.c_str());
@@ -1708,7 +1711,7 @@ void RtMidiOut :: initialize(char *clientName)
     snd_seq_t *seq;
     int result = snd_seq_open(&seq,
                               "default",
-                              SND_SEQ_OPEN_OUTPUT,
+                              SND_SEQ_OPEN_DUPLEX,
                               SND_SEQ_NONBLOCK);
 
     if(result < 0)
@@ -1724,7 +1727,7 @@ void RtMidiOut :: initialize(char *clientName)
     // Save our api-specific connection information.
     AlsaMidiData *data = (AlsaMidiData *) new AlsaMidiData;
     data->seq = seq;
-    data->portNum = -1;
+    data->client_id = -1;
     data->vport = -1;
     data->bufferSize = 32;
     data->coder = 0;
@@ -1746,6 +1749,7 @@ void RtMidiOut :: initialize(char *clientName)
         return;
     }
     snd_midi_event_init(data->coder);
+    snd_midi_event_no_status(data->coder, 1);
     apiData_ = (void *) data;
 }
 
@@ -1768,6 +1772,7 @@ void RtMidiOut :: openPort(unsigned int portNumber, char *portName)
 
     snd_seq_port_info_t *pinfo;
     snd_seq_port_info_alloca(&pinfo);
+
     AlsaMidiData *data = static_cast<AlsaMidiData *> (apiData_);
     if(portInfo(data->seq,
                 pinfo,
@@ -1783,16 +1788,16 @@ void RtMidiOut :: openPort(unsigned int portNumber, char *portName)
     receiver.client = snd_seq_port_info_get_client(pinfo);
     receiver.port = snd_seq_port_info_get_port(pinfo);
     sender.client = snd_seq_client_id(data->seq);
+    data->client_id = receiver.client;
 
     if(data->vport < 0)
     {
-        data->vport = snd_seq_create_simple_port(data->seq,
-                                                 portName,
-                                                 SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ,
-                                                 SND_SEQ_PORT_TYPE_MIDI_GENERIC);
+        data->vport = snd_seq_create_simple_port(data->seq, portName,
+                                                 SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_WRITE,
+                                                 SND_SEQ_PORT_TYPE_APPLICATION );
         if(data->vport < 0)
         {
-            sprintf(errorString_, "RtMidiOut::openPort: ALSA error creating output port.");
+            sprintf(errorString_, "MidiOutAlsa::openPort: ALSA error creating output port.");
             error(RtError::DRIVER_ERROR);
             return;
         }
@@ -1800,26 +1805,29 @@ void RtMidiOut :: openPort(unsigned int portNumber, char *portName)
 
     sender.port = data->vport;
 
-    // Make subscription
-    if(snd_seq_port_subscribe_malloc(&data->subscription) < 0)
+    if(!data->subscription)
     {
-        snd_seq_port_subscribe_free( data->subscription );
-        sprintf(errorString_, "RtMidiOut::openPort: ALSA error allocating port subscription.");
-        error(RtError::DRIVER_ERROR);
-        return;
+        // Make subscription
+        if(snd_seq_port_subscribe_malloc(&data->subscription) < 0)
+        {
+            sprintf(errorString_, "RtMidiIn::openPort: ALSA error allocation port subscription.");
+            error(RtError::DRIVER_ERROR);
+            return;
+        }
+        snd_seq_port_subscribe_set_sender(data->subscription, &sender);
+        snd_seq_port_subscribe_set_dest(data->subscription, &receiver);
+        snd_seq_port_subscribe_set_time_update(data->subscription, 1);
+        snd_seq_port_subscribe_set_time_real(data->subscription, 1);
+        if(snd_seq_subscribe_port(data->seq, data->subscription))
+        {
+            snd_seq_port_subscribe_free(data->subscription);
+            data->subscription = 0;
+            sprintf(errorString_, "RtMidiOut::openPort: ALSA error making port connection.");
+            error(RtError::DRIVER_ERROR);
+            return;
+        }
     }
-    
-    snd_seq_port_subscribe_set_sender(data->subscription, &sender);
-    snd_seq_port_subscribe_set_dest(data->subscription, &receiver);
-    snd_seq_port_subscribe_set_time_update(data->subscription, 1);
-    snd_seq_port_subscribe_set_time_real(data->subscription, 1);
-    if(snd_seq_subscribe_port(data->seq, data->subscription))
-    {
-        snd_seq_port_subscribe_free(data->subscription);
-        sprintf(errorString_, "RtMidiOut::openPort: ALSA error making port connection.");
-        error(RtError::DRIVER_ERROR);
-        return;
-    }
+
     connected_ = true;
 }
 
@@ -1841,8 +1849,8 @@ void RtMidiOut :: openVirtualPort(char *portName)
     if(data->vport < 0)
     {
         data->vport = snd_seq_create_simple_port(data->seq, portName,
-                                                 SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ,
-                                                 SND_SEQ_PORT_TYPE_MIDI_GENERIC);
+                                                 SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_WRITE,
+                                                 SND_SEQ_PORT_TYPE_APPLICATION);
 
         if(data->vport < 0)
         {
@@ -1876,7 +1884,7 @@ void RtMidiOut :: sendMessage(std::vector<unsigned char> *message)
     if(nBytes > data->bufferSize)
     {
         data->bufferSize = nBytes;
-        result = snd_midi_event_resize_buffer ( data->coder, nBytes);
+        result = snd_midi_event_resize_buffer(data->coder, nBytes);
         if(result != 0)
         {
             sprintf(errorString_, "RtMidiOut::sendMessage: ALSA error resizing MIDI event buffer.");
@@ -1904,9 +1912,10 @@ void RtMidiOut :: sendMessage(std::vector<unsigned char> *message)
     {
         snd_seq_event_t ev;
         snd_seq_ev_clear(&ev);
-        snd_seq_ev_set_source(&ev, data->vport);
-        snd_seq_ev_set_subs(&ev);
         snd_seq_ev_set_direct(&ev);
+        snd_seq_ev_set_dest(&ev, data->client_id, data->vport);
+        snd_seq_ev_set_subs(&ev);
+        
         result = snd_midi_event_encode(data->coder, data->buffer + offset, (long) (nBytes - offset), &ev);
         if(result < 0)
         {
@@ -1927,7 +1936,7 @@ void RtMidiOut :: sendMessage(std::vector<unsigned char> *message)
         result = snd_seq_event_output(data->seq, &ev);
         if(result < 0)
         {
-            sprintf(errorString_, "RtMidiOut::sendMessage: error sending MIDI message to port.");
+            sprintf(errorString_, "RtMidiOut::sendMessage: error sending MIDI message to port (%d).", result);
             error(RtError::WARNING);
             return;
         }
@@ -2271,6 +2280,7 @@ RtMidiIn :: ~RtMidiIn()
     WinMidiData *data = static_cast<WinMidiData *> (apiData_);
     DeleteCriticalSection(&data->_mutex);
     delete data;
+    data = 0;
 }
 
 unsigned int RtMidiIn :: getPortCount()

@@ -420,15 +420,16 @@ void Midi_FreeAll(void)
 // Send a command to the midi out device
 void _Midi_Send(int nbr_track, int eff_dat, int row_dat)
 {
-    std::vector<unsigned char> message;
+    std::vector<unsigned char> out_message;
+
     if(eff_dat != -1)
     {
-        message.push_back(nbr_track);
-        message.push_back(eff_dat);
-        message.push_back(row_dat);
+        out_message.push_back(nbr_track);
+        out_message.push_back(eff_dat);
+        out_message.push_back(row_dat);
         if(midiout)
         {
-            midiout->sendMessage(&message);
+            midiout->sendMessage(&out_message);
         }
     }
 }
