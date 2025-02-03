@@ -2903,9 +2903,6 @@ void Song_Stop(void)
     Gui_Draw_Button_Box(8, 28, 39, 16, "\04", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
     Gui_Draw_Button_Box(49, 28, 39, 16, "\253", BUTTON_NORMAL | BUTTON_RIGHT_MOUSE | BUTTON_TEXT_CENTERED);
     Status_Box("Feeling Groovy.", TRUE);
-    PosInTick = 0;
-    Pattern_Line_Visual = Delays_Pos_Sound_Buffer[Delay_Sound_Buffer].Line;
-    Song_Position_Visual = Delays_Pos_Sound_Buffer[Delay_Sound_Buffer].Pos;
     Song_Position = Song_Position_Visual;
     Pattern_Line = Pattern_Line_Visual;
     Actualize_Master(5);
@@ -3922,18 +3919,18 @@ void Keyboard_Handler(void)
     int validating_input = FALSE;
 
     // Exit tracker
-    if(Get_LAlt() && Keys[SDLK_F4]) gui_action = GUI_CMD_EXIT;
+    if(Get_LAlt() && !Get_LCtrl() && Keys[SDLK_F4]) gui_action = GUI_CMD_EXIT;
     // Lower octave
-    if(!Get_LShift() && Keys[SDLK_F1]) gui_action = GUI_CMD_LOWER_OCTAVE;
+    if(!Get_LShift() && !Get_LCtrl() && Keys[SDLK_F1]) gui_action = GUI_CMD_LOWER_OCTAVE;
     // Higher octave
-    if(!Get_LShift() && Keys[SDLK_F2]) gui_action = GUI_CMD_HIGHER_OCTAVE;
+    if(!Get_LShift() && !Get_LCtrl() && Keys[SDLK_F2]) gui_action = GUI_CMD_HIGHER_OCTAVE;
     // Helper
-    if(!Get_LShift() && Keys[SDLK_F3]) gui_action = GUI_CMD_GET_HELP;
+    if(!Get_LShift() && !Get_LCtrl() && Keys[SDLK_F3]) gui_action = GUI_CMD_GET_HELP;
 
-    if(Get_LCtrl() && Keys[SDLK_F1]) gui_action = GUI_CMD_DECREASE_STEP_ADD;
-    if(Get_LCtrl() && Keys[SDLK_F2]) gui_action = GUI_CMD_INCREASE_STEP_ADD;
+    if(Get_LCtrl() && !Get_LShift() && Keys[SDLK_F2]) gui_action = GUI_CMD_DECREASE_STEP_ADD;
+    if(Get_LCtrl() && !Get_LShift() && Keys[SDLK_F4]) gui_action = GUI_CMD_INCREASE_STEP_ADD;
 
-    if(Get_LShift())
+    if(Get_LShift() && !Get_LCtrl())
     {
         if(Keys[SDLK_ESCAPE])
         {
@@ -4099,14 +4096,12 @@ void Keyboard_Handler(void)
         // Previous column or previous track
         if(Keys[SDLK_LEFT] && !Get_LCtrl() && !Get_LAlt() && !Get_RShift())
         {
-            printf("LEFT\n");
             Goto_Previous_Column();
         }
 
         // Next column or next track
         if(Keys[SDLK_RIGHT] && !Get_LCtrl() && !Get_LAlt() && !Get_RShift())
         {
-            printf("RIGHT\n");
             Goto_Next_Column();
         }
 
@@ -4137,14 +4132,12 @@ void Keyboard_Handler(void)
         // Previous row
         if(Keys[SDLK_UP] && !Song_Playing && !Get_RShift())
         {
-            printf("UP\n");
             Goto_Previous_Row(TRUE);
         }
 
         // Next row
         if(Keys[SDLK_DOWN] && !Song_Playing && !Get_RShift())
         {
-            printf("DOWN\n");
             Goto_Next_Row(TRUE);
         }
 
@@ -4172,7 +4165,7 @@ void Keyboard_Handler(void)
             gui_action = GUI_CMD_NEXT_PATT;
         }
 
-        if(Keys[SDLK_INSERT] && can_modify_song)
+        if(Keys[SDLK_INSERT] && can_modify_song && !Get_LCtrl())
         {
             // INSERT
             if(Get_LShift())
@@ -4187,7 +4180,7 @@ void Keyboard_Handler(void)
 
         if(snamesel == INPUT_NONE)
         {
-            if(Keys[SDLK_BACKSPACE] && can_modify_song)
+            if(Keys[SDLK_BACKSPACE] && can_modify_song  && !Get_LCtrl())
             {
                 // BACKSPACE
                 if(Get_LShift())
@@ -4666,7 +4659,7 @@ void Keyboard_Handler(void)
         }
     }
 
-    if(snamesel == INPUT_NONE && !reelletter)
+    if(snamesel == INPUT_NONE && !reelletter && !Get_LCtrl())
     {
         // Data columns
         if(Keys_Unicode[SDLK_0]) retvalue = 0;
@@ -4969,7 +4962,7 @@ void Keyboard_Handler(void)
 
         if(Key_Unicode)
         {
-            if(Get_LShift())
+            if(Get_LShift() && !Get_LCtrl())
             {
                 if(Keys[SDLK_m - UNICODE_OFFSET1])
                 {
